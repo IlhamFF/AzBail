@@ -26,10 +26,12 @@ const nextConfig: NextConfig = {
       // },
     ],
   },
-   env: {
-     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-   },
+   // The env block is not necessary for variables prefixed with NEXT_PUBLIC_
+   // Next.js automatically makes these available to the browser.
+   // env: {
+   //   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+   //   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+   // },
 };
 
 export default nextConfig;
