@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // Use browser client
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
@@ -58,7 +58,7 @@ export default function ProfilePage() {
       if (user) {
         setLoadingProfile(true);
         try {
-          // Fetch from user_details table based on user_id
+          // Fetch from user_details table based on user_id using browser client
           const { data, error } = await supabase
             .from('user_details')
             .select('*')
@@ -118,7 +118,7 @@ export default function ProfilePage() {
      setIsUpdating(true);
 
      try {
-       // 1. Update user_metadata in Supabase Auth (only full_name and potentially avatar_url)
+       // 1. Update user_metadata in Supabase Auth (only full_name and potentially avatar_url) using browser client
        const { data: updatedUser, error: userMetadataError } = await supabase.auth.updateUser({
          data: {
            full_name: values.fullName,
@@ -128,7 +128,7 @@ export default function ProfilePage() {
 
        if (userMetadataError) throw userMetadataError;
 
-       // 2. Upsert (update or insert) into user_details table
+       // 2. Upsert (update or insert) into user_details table using browser client
        const { error: detailsError } = await supabase
          .from('user_details')
          .upsert({

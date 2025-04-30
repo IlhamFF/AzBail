@@ -2,7 +2,7 @@
 
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // Use the browser client
 import { useRouter, usePathname } from 'next/navigation';
 
 interface AuthContextType {
@@ -27,6 +27,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const getSession = async () => {
+      // Use the imported browser client
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
@@ -35,6 +36,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     getSession();
 
+    // Use the imported browser client for the listener
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log(`Supabase auth event: ${event}`);
@@ -43,14 +45,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setLoading(false);
 
         // Redirect logic based on auth state and current path
-        const isAuthPage = pathname === '/login' || pathname === '/register';
+        const isAuthPage = pathname === '/login' || pathname === '/register' || pathname === '/admin/login';
+        const isAdminRoute = pathname.startsWith('/admin') && pathname !== '/admin/login';
 
-        if (event === 'SIGNED_IN' && isAuthPage) {
-          router.push('/dashboard');
-        } else if (event === 'SIGNED_OUT' && pathname !== '/login' && pathname !== '/register' && pathname !== '/') {
-           // Allow staying on landing page '/'
-           if (pathname !== '/') {
-             router.push('/login');
+        if (event === 'SIGNED_IN') {
+            // Redirect non-admins trying to access admin routes
+            if (isAdminRoute && session?.user?.user_metadata?.role !== 'Admin') {
+                await supabase.auth.signOut(); // Sign them out
+                router.push('/login'); // Redirect to general login
+            }
+            // Redirect logged-in users away from auth pages (unless it's admin login for admin)
+            else if (isAuthPage && !(pathname === '/admin/login' && session?.user?.user_metadata?.role === 'Admin')) {
+                 router.push('/dashboard');
+            }
+        } else if (event === 'SIGNED_OUT') {
+           // Redirect logged-out users trying to access protected areas
+           if (!isAuthPage && pathname !== '/') {
+              router.push('/login');
            }
         }
       }
@@ -63,10 +74,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signOut = async () => {
     setLoading(true);
-    await supabase.auth.signOut();
+    await supabase.auth.signOut(); // Use the imported browser client
     setUser(null);
     setSession(null);
-    setLoading(false);
+    // No need to setLoading(false) here, onAuthStateChange will handle it
     router.push('/login'); // Redirect to login after sign out
   };
 
@@ -77,11 +88,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signOut,
   };
 
-  // Prevent rendering children on auth pages if user is already logged in (avoids flash of content)
-  const isAuthPage = pathname === '/login' || pathname === '/register';
-   if (loading && !isAuthPage) {
+  // Show loading state while determining auth status, except on public/auth pages
+  const isPublicPage = pathname === '/login' || pathname === '/register' || pathname === '/admin/login' || pathname === '/';
+   if (loading && !isPublicPage) {
      return <div>Loading application...</div>; // Or a proper loading component
    }
+
+  // Prevent rendering protected pages if loading or no user (let useEffect handle redirect)
+   if (!loading && !user && !isPublicPage) {
+       return <div>Redirecting...</div>; // Or loading state
+   }
+
 
   return (
     <AuthContext.Provider value={value}>

@@ -19,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // Use browser client
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 
@@ -44,7 +44,8 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      // Use the browser client
+      const { error, data } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
@@ -53,13 +54,28 @@ export default function LoginPage() {
         throw error;
       }
 
-      // AuthProvider's onAuthStateChange will handle redirection
-       toast({
-         title: 'Login Berhasil',
-         description: 'Anda akan diarahkan ke dashboard.',
-       });
-       // No need to manually redirect here if AuthProvider handles it.
-       // setTimeout(() => router.push('/dashboard'), 1000); // Optional delay
+       // Check role after successful sign-in
+      const userRole = data.user?.user_metadata?.role;
+
+      if (userRole === 'Admin') {
+         // If admin, redirect to admin login confirmation or directly to admin dashboard
+         // For now, let AuthContext handle the redirect based on role check
+         toast({
+            title: 'Login Berhasil (Admin)',
+            description: 'Mengalihkan ke dashboard admin...',
+         });
+         // AuthProvider should redirect to /admin/dashboard if role is Admin
+      } else {
+         // For non-admin roles
+         toast({
+           title: 'Login Berhasil',
+           description: 'Anda akan diarahkan ke dashboard.',
+         });
+         // AuthProvider should redirect to /dashboard for other roles
+      }
+
+
+      // AuthProvider's onAuthStateChange will handle redirection based on role
 
     } catch (error: any) {
       console.error('Login error:', error);
@@ -121,6 +137,10 @@ export default function LoginPage() {
              Belum punya akun?{' '}
              <Link href="/register" className="underline text-accent">
                Daftar di sini
+             </Link>
+              {' | '}
+             <Link href="/admin/login" className="underline text-accent">
+               Login Admin
              </Link>
            </div>
         </CardContent>

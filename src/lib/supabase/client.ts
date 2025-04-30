@@ -1,27 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
-// Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your environment variables
+// Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Check for Supabase URL existence
-if (!supabaseUrl) {
-  throw new Error("Missing environment variable: NEXT_PUBLIC_SUPABASE_URL. Please ensure it is set in your .env file.");
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Missing Supabase URL or Anon Key. Check your .env file.");
 }
 
-// Check for Supabase Anon Key existence
-if (!supabaseAnonKey) {
-  throw new Error("Missing environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY. Please ensure it is set in your .env file.");
-}
+// Export a function that creates the client to ensure it's created on the client-side
+// This is useful if you need a new instance per request or component.
+export const createSupabaseBrowserClient = () => createBrowserClient(supabaseUrl, supabaseAnonKey);
 
-// Validate Supabase URL format before passing to the client
-try {
-  new URL(supabaseUrl);
-} catch (e) {
-   console.error("Invalid Supabase URL provided:", supabaseUrl);
-   throw new Error(`Invalid URL format for NEXT_PUBLIC_SUPABASE_URL: "${supabaseUrl}". Please ensure it includes the protocol (e.g., "https://").`);
-}
-
-
-// Create Supabase client - this should now only be called with a validated URL and key
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Export a singleton instance for convenience in client components.
+// This instance is safe to use across client components as it manages its own state.
+export const supabase = createSupabaseBrowserClient();

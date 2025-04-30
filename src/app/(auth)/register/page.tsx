@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // Use browser client
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 
@@ -59,7 +59,7 @@ export default function RegisterPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      // 1. Sign up the user with Supabase Auth
+      // 1. Sign up the user with Supabase Auth using browser client
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
@@ -76,8 +76,8 @@ export default function RegisterPage() {
 
       if (signUpError) {
         // Handle specific errors like email already exists
-        if (signUpError.message.includes('unique constraint')) {
-           throw new Error('Email sudah terdaftar. Silakan gunakan email lain.');
+        if (signUpError.message.includes('unique constraint') || signUpError.message.includes('already registered')) {
+           throw new Error('Email sudah terdaftar. Silakan gunakan email lain atau login.');
         }
         throw signUpError;
       }
@@ -86,11 +86,9 @@ export default function RegisterPage() {
         throw new Error('Gagal membuat pengguna. Silakan coba lagi.');
       }
 
-      // 2. Optionally, insert into user_details immediately (or handle via trigger/function)
-      // This depends on your architecture. If user_metadata is enough for initial display,
-      // you might populate user_details after verification or upon first profile edit.
-      // Example of inserting into user_details (ensure RLS allows this if done client-side):
-      /*
+      // 2. Optionally, insert into user_details immediately
+      // Note: Ensure RLS allows authenticated users to insert into their own details record.
+      // Alternatively, handle this via a Supabase Function trigger on auth.users insert.
       const { error: detailError } = await supabase
         .from('user_details')
         .insert({
@@ -100,10 +98,10 @@ export default function RegisterPage() {
         });
 
       if (detailError) {
-        // Consider how to handle failure here - maybe log it, but proceed with signup message
-        console.error('Error inserting user details:', detailError);
+        // Log error but proceed with signup message, as auth user is created.
+        console.error('Error inserting user details during registration:', detailError);
+        // Optionally inform the user or trigger an admin notification
       }
-      */
 
 
       toast({

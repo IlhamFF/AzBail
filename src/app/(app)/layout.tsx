@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+import React from 'react';
+import { useAuth } from '@/context/AuthContext'; // Context still needed for user info display
 import {
   Sidebar,
   SidebarContent,
@@ -14,13 +13,14 @@ import {
   SidebarTrigger,
   SidebarInset,
   SidebarMenuSub,
-  SidebarMenuSubButton,
+  SidebarMenuSubButton, // Corrected import
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenuSkeleton,
+  SidebarMenuSubItem // Added import
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+// import { Button } from '@/components/ui/button'; // Button only used for logout, handled by SidebarMenuButton
 import {
   LayoutDashboard,
   Users,
@@ -45,18 +45,30 @@ import {
   BookMarked, // Example for Materi
   Home, // Example for Dashboard
   UserCog, // Example for Profile/Settings
+  ChevronDown, // For sub-menu indicator
+  UserPlus, // For Verify Users
+  DatabaseBackup // Example for Audit Logs, could use ClipboardList too
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation'; // Import usePathname
 
 // Define menu items based on roles
-const menuItems: Record<string, { label: string; icon: React.ElementType; path: string; subItems?: { label: string; path: string }[] }[]> = {
+interface MenuItem {
+  label: string;
+  icon: React.ElementType;
+  path: string;
+  subItems?: { label: string; path: string }[];
+}
+
+const menuItems: Record<string, MenuItem[]> = {
   Admin: [
-    { label: 'Dashboard', icon: Home, path: '/dashboard' },
-    { label: 'Verifikasi Pengguna', icon: UserCheck, path: '/admin/verify-users' },
+    { label: 'Dashboard', icon: Home, path: '/admin/dashboard' }, // Updated path
+    { label: 'Verifikasi Pengguna', icon: UserPlus, path: '/admin/verify-users' }, // Use UserPlus
     { label: 'Manajemen Pengguna', icon: Users, path: '/admin/manage-users' },
     { label: 'Manajemen Kelas', icon: Building, path: '/admin/manage-classes' },
     { label: 'Manajemen Mapel', icon: BookOpen, path: '/admin/manage-subjects' },
-    { label: 'Log Aktivitas', icon: ClipboardList, path: '/admin/audit-logs' },
+    { label: 'Log Aktivitas', icon: DatabaseBackup, path: '/admin/audit-logs' }, // Use DatabaseBackup or similar
+    { label: 'Pengumuman', icon: Bell, path: '/announcements' }, // Admin can also see/manage announcements
     { label: 'Pengaturan', icon: Settings, path: '/settings' },
   ],
   Guru: [
@@ -66,7 +78,7 @@ const menuItems: Record<string, { label: string; icon: React.ElementType; path: 
     {
       label: 'Akademik',
       icon: GraduationCap,
-      path: '#',
+      path: '#', // Indicate it's a dropdown trigger
       subItems: [
         { label: 'Input Nilai', path: '/teacher/grades' },
         { label: 'Input Absensi', path: '/teacher/attendance' },
@@ -109,7 +121,6 @@ const menuItems: Record<string, { label: string; icon: React.ElementType; path: 
 
 // Helper function to get role from user metadata
 const getUserRole = (user: any): string | null => {
-  // Adjust based on where you store the role (e.g., app_metadata or user_metadata)
   return user?.user_metadata?.role || null;
 };
 
@@ -118,46 +129,54 @@ const getUserFullName = (user: any): string => {
    return user?.user_metadata?.full_name || user?.email || 'Pengguna';
 };
 
-// Helper function to get avatar URL (assuming it's stored or constructed)
+// Helper function to get avatar URL
 const getUserAvatarUrl = (user: any): string | undefined => {
-  // Replace with your actual logic to get avatar URL
-  return user?.user_metadata?.avatar_url; // Example
+  return user?.user_metadata?.avatar_url;
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, signOut } = useAuth();
-  const router = useRouter();
+  const { user, signOut, loading } = useAuth(); // Only need user info and signout
+  const pathname = usePathname(); // Get current path
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-     // Optional: Check for verification status if needed for all app routes
-     // if (!loading && user && !user.user_metadata?.is_verified) {
-     //   // Redirect to a pending verification page or show a banner
-     //   console.log("User not verified");
-     //   // Example: router.push('/pending-verification');
-     // }
-  }, [user, loading, router]);
+  // Determine role and menu items, handle loading/no user state gracefully
+  const userRole = loading ? null : getUserRole(user);
+  const currentMenuItems = (!loading && userRole && menuItems[userRole]) ? menuItems[userRole] : [];
+  const userName = loading ? 'Loading...' : (user ? getUserFullName(user) : 'Pengguna');
+  const userAvatar = loading ? undefined : (user ? getUserAvatarUrl(user) : undefined);
 
-  if (loading) {
-    return (
-       <div className="flex h-screen items-center justify-center">
-         <div>Loading dashboard...</div>
-         {/* Or use Skeleton components */}
-       </div>
-     );
-  }
 
-  if (!user) {
-     // Should be redirected by useEffect, but as a fallback:
-     return null; // Or a message indicating redirection
+   // Loading state for the layout itself can be simplified as AuthProvider handles the main loading/redirect
+   if (loading) {
+      // You might want a minimal loading UI within the layout structure
+      return (
+          <div className="flex min-h-screen">
+             {/* Basic Sidebar structure during load */}
+             <Sidebar collapsible="icon">
+                 <SidebarHeader className="p-4"><Skeleton className="h-8 w-8 rounded-full" /><Skeleton className="h-4 w-20 ml-2" /></SidebarHeader>
+                 <SidebarContent><SidebarMenuSkeleton showIcon /><SidebarMenuSkeleton showIcon /></SidebarContent>
+                 <SidebarFooter><SidebarMenuSkeleton showIcon /></SidebarFooter>
+             </Sidebar>
+              <SidebarInset className="flex-1 p-4 md:p-6">
+                  <div>Loading...</div>
+              </SidebarInset>
+          </div>
+      );
    }
 
-  const userRole = getUserRole(user);
-  const currentMenuItems = userRole ? menuItems[userRole] || [] : [];
-  const userName = getUserFullName(user);
-  const userAvatar = getUserAvatarUrl(user);
+   // If somehow layout renders without user (middleware/AuthProvider should prevent this for protected routes)
+   if (!user) {
+       // This case should ideally not happen for routes using this layout due to protection
+       // You could return null or a redirecting message, but middleware is better
+       return null; // Or redirect logic if necessary, though middleware is preferred
+   }
+
+  // Function to check if a menu item or sub-item is active
+  const isItemActive = (path: string): boolean => {
+    if (path === '#') return false; // Dropdown triggers are never active themselves
+    // Exact match or parent path match for sub-routes
+    return pathname === path || pathname.startsWith(path + '/');
+  };
+
 
   return (
     <div className="flex min-h-screen">
@@ -168,7 +187,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <AvatarImage src={userAvatar} alt={userName} />
               <AvatarFallback>{userName.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
-            <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">
+            <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden truncate max-w-[100px]">
               {userName}
             </span>
           </div>
@@ -182,32 +201,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                <SidebarTrigger />
            </div>
           <SidebarMenu>
-            {currentMenuItems.length === 0 && !loading && userRole && (
+            {currentMenuItems.length === 0 && userRole && (
               <SidebarMenuItem>
-                 <div className="p-2 text-muted-foreground text-sm">Menu tidak tersedia untuk peran ini.</div>
+                 <div className="p-2 text-muted-foreground text-sm">Menu tidak tersedia.</div>
               </SidebarMenuItem>
-             )}
-             {currentMenuItems.length === 0 && loading && (
-                 <>
-                     <SidebarMenuSkeleton showIcon />
-                     <SidebarMenuSkeleton showIcon />
-                     <SidebarMenuSkeleton showIcon />
-                 </>
              )}
             {currentMenuItems.map((item, index) => (
               <SidebarMenuItem key={index}>
                 {item.subItems ? (
-                  // Group for items with submenus (using Accordion or similar might be better)
+                  // Group for items with submenus
+                  // Using simple disclosure for now, Accordion can be complex here
                   <SidebarGroup>
-                     <SidebarMenuButton> {/* Consider making this a non-clickable label */}
-                         <item.icon />
-                         <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
+                      {/* Sub-menu Trigger Button */}
+                     <SidebarMenuButton
+                         aria-expanded="false" // Manage state if using Accordion
+                         className="justify-between"
+                         isActive={item.subItems.some(sub => isItemActive(sub.path))} // Highlight if any sub-item is active
+                     >
+                         <div className="flex items-center gap-2">
+                             <item.icon />
+                             <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
+                         </div>
+                         <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
                      </SidebarMenuButton>
+                     {/* Sub-menu Content */}
                      <SidebarMenuSub>
                        {item.subItems.map((subItem, subIndex) => (
                          <SidebarMenuSubItem key={subIndex}>
                            <Link href={subItem.path} passHref legacyBehavior>
-                             <SidebarMenuSubButton asChild>
+                             <SidebarMenuSubButton asChild isActive={isItemActive(subItem.path)}>
                                <a>{subItem.label}</a>
                              </SidebarMenuSubButton>
                            </Link>
@@ -219,7 +241,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ) : (
                   // Regular menu item
                   <Link href={item.path} passHref legacyBehavior>
-                    <SidebarMenuButton asChild tooltip={item.label}>
+                    <SidebarMenuButton asChild tooltip={item.label} isActive={isItemActive(item.path)}>
                       <a>
                         <item.icon />
                         <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
@@ -236,7 +258,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarMenu>
              <SidebarMenuItem>
                 <Link href="/settings" passHref legacyBehavior>
-                  <SidebarMenuButton asChild tooltip="Pengaturan">
+                  <SidebarMenuButton asChild tooltip="Pengaturan" isActive={isItemActive('/settings')}>
                     <a>
                       <Settings />
                       <span className="group-data-[collapsible=icon]:hidden">Pengaturan</span>
@@ -254,15 +276,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
 
-      {/* Use SidebarInset to wrap the main content area */}
+      {/* SidebarInset wraps the main content area */}
        <SidebarInset className="flex-1 overflow-auto">
-            {/* Header for the main content area (optional) */}
+            {/* Optional Header for main content area */}
              <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 sm:py-4">
-                {/* Mobile Sidebar Trigger - Place here if preferred */}
-                 {/* <SidebarTrigger className="sm:hidden" /> */}
-                 {/* Breadcrumbs or Title */}
-                 <h1 className="text-xl font-semibold">EduPortal</h1>
-                 {/* Other header elements like search, notifications */}
+                 <h1 className="text-xl font-semibold">EduPortal {userRole ? `(${userRole})` : ''}</h1>
              </header>
               {/* Main content */}
               <main className="flex-1 p-4 md:p-6">
