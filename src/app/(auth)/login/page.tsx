@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase/client'; // Use browser client
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Format email tidak valid.' }),
@@ -32,6 +33,21 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const { user, loading } = useAuth(); // Get user and loading state
+
+  // Redirect if already logged in
+  React.useEffect(() => {
+    if (!loading && user) {
+        // Check role for appropriate redirection
+        const userRole = user.user_metadata?.role;
+        if (userRole === 'Admin') {
+            router.push('/admin/dashboard');
+        } else {
+            router.push('/dashboard');
+        }
+    }
+  }, [user, loading, router]);
+
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -54,28 +70,25 @@ export default function LoginPage() {
         throw error;
       }
 
-       // Check role after successful sign-in
+      // Check role after successful sign-in
       const userRole = data.user?.user_metadata?.role;
 
       if (userRole === 'Admin') {
-         // If admin, redirect to admin login confirmation or directly to admin dashboard
-         // For now, let AuthContext handle the redirect based on role check
          toast({
             title: 'Login Berhasil (Admin)',
             description: 'Mengalihkan ke dashboard admin...',
          });
-         // AuthProvider should redirect to /admin/dashboard if role is Admin
+         // Redirect explicitly here or let AuthContext handle it
+         router.push('/admin/dashboard');
       } else {
-         // For non-admin roles
          toast({
            title: 'Login Berhasil',
            description: 'Anda akan diarahkan ke dashboard.',
          });
-         // AuthProvider should redirect to /dashboard for other roles
+         // Redirect explicitly here or let AuthContext handle it
+         router.push('/dashboard');
       }
-
-
-      // AuthProvider's onAuthStateChange will handle redirection based on role
+      // AuthProvider's onAuthStateChange might also handle redirection, ensure consistency
 
     } catch (error: any) {
       console.error('Login error:', error);
@@ -88,6 +101,17 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   }
+
+    // Show loading state while checking auth status
+    if (loading) {
+        return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+    }
+
+    // Don't render login form if user is already logged in (and redirection hasn't happened yet)
+    if (user) {
+        return <div className="flex min-h-screen items-center justify-center">Redirecting...</div>;
+    }
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
