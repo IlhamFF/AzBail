@@ -62,14 +62,14 @@ interface MenuItem {
 
 const menuItems: Record<string, MenuItem[]> = {
   Admin: [
-    { label: 'Dashboard', icon: Home, path: '/admin/dashboard' }, // Updated path
-    { label: 'Verifikasi Pengguna', icon: UserPlus, path: '/admin/verify-users' }, // Use UserPlus
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' }, // Use LayoutDashboard for admin dashboard
+    { label: 'Verifikasi Pengguna', icon: UserPlus, path: '/admin/verify-users' },
     { label: 'Manajemen Pengguna', icon: Users, path: '/admin/manage-users' },
     { label: 'Manajemen Kelas', icon: Building, path: '/admin/manage-classes' },
     { label: 'Manajemen Mapel', icon: BookOpen, path: '/admin/manage-subjects' },
-    { label: 'Log Aktivitas', icon: DatabaseBackup, path: '/admin/audit-logs' }, // Use DatabaseBackup or similar
-    { label: 'Pengumuman', icon: Bell, path: '/announcements' }, // Admin can also see/manage announcements
-    { label: 'Pengaturan', icon: Settings, path: '/settings' },
+    { label: 'Log Aktivitas', icon: DatabaseBackup, path: '/admin/audit-logs' },
+    { label: 'Pengumuman', icon: Bell, path: '/announcements' }, // General page
+    { label: 'Pengaturan', icon: Settings, path: '/settings' }, // General page
   ],
   Guru: [
     { label: 'Dashboard', icon: Home, path: '/dashboard' },
@@ -171,10 +171,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
    }
 
   // Function to check if a menu item or sub-item is active
+  // Updated logic: checks for exact match or if the current path starts with the item path followed by a '/'
   const isItemActive = (path: string): boolean => {
     if (path === '#') return false; // Dropdown triggers are never active themselves
     // Exact match or parent path match for sub-routes
-    return pathname === path || pathname.startsWith(path + '/');
+    return pathname === path || (path !== '/' && pathname.startsWith(path + '/'));
   };
 
 
@@ -291,3 +292,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+    
