@@ -8,6 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale'; // Import Indonesian locale
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 interface Announcement {
   id: string;
@@ -16,7 +18,7 @@ interface Announcement {
   created_at: string;
   is_pinned: boolean;
   target_role: string | null;
-  // Optionally join user_details to get creator name
+  // Joined user_details for creator name
   created_by_name?: string;
 }
 
@@ -29,17 +31,18 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     const fetchAnnouncements = async () => {
-      if (!user) {
+      if (!user || !userRole) {
          setLoading(false);
-         return;
-      };
+         return; // Don't fetch if user or role is not available yet
+      }
 
       setLoading(true);
       setError(null);
 
       try {
-         // Use browser client
-         let query = supabase
+         // Use browser client to fetch data
+         // RLS policies in Supabase will enforce access control
+         const { data, error: fetchError } = await supabase
           .from('announcements')
           .select(`
             id,
@@ -51,11 +54,10 @@ export default function AnnouncementsPage() {
             user_details ( full_name )
           `)
           // Filter based on target_role: show if null (for all) or matches user's role
+          // Using .or() requires the column name to be specified for each condition
           .or(`target_role.is.null,target_role.eq.${userRole}`)
           .order('is_pinned', { ascending: false }) // Pinned first
           .order('created_at', { ascending: false }); // Then by date
-
-        const { data, error: fetchError } = await query;
 
         if (fetchError) {
           throw fetchError;
@@ -64,23 +66,29 @@ export default function AnnouncementsPage() {
         // Map data to include creator name directly
         const formattedData = data?.map(ann => ({
            ...ann,
-           created_by_name: (ann.user_details as any)?.full_name || 'Sistem', // Handle potential null details
+           // Access joined data correctly - Supabase returns it as an object or array
+           created_by_name: (ann.user_details as any)?.full_name || 'Sistem',
         })) || [];
 
         setAnnouncements(formattedData);
       } catch (err: any) {
         console.error('Error fetching announcements:', err);
-        setError('Gagal memuat pengumuman.');
+        setError('Gagal memuat pengumuman. Pastikan Anda memiliki koneksi internet dan coba lagi.');
       } finally {
         setLoading(false);
       }
     };
 
-     if (!authLoading) {
+     // Fetch data only when auth loading is complete and user is available
+     if (!authLoading && user) {
        fetchAnnouncements();
+     } else if (!authLoading && !user) {
+         // If auth is done loading but there's no user, stop loading state
+         setLoading(false);
+         setError("Anda harus login untuk melihat pengumuman.");
      }
 
-  }, [user, authLoading, userRole]);
+  }, [user, authLoading, userRole]); // Add userRole to dependency array
 
   return (
     <div className="space-y-6">
@@ -107,17 +115,17 @@ export default function AnnouncementsPage() {
       )}
 
       {error && (
-        <Card className="bg-destructive/10 border-destructive">
-          <CardContent className="p-4 text-destructive-foreground">
-            {error}
-          </CardContent>
-        </Card>
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {!loading && !error && announcements.length === 0 && (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            Tidak ada pengumuman saat ini.
+            Tidak ada pengumuman yang relevan untuk Anda saat ini.
           </CardContent>
         </Card>
       )}
@@ -125,7 +133,7 @@ export default function AnnouncementsPage() {
       {!loading && !error && announcements.length > 0 && (
         <div className="space-y-4">
           {announcements.map((ann) => (
-            <Card key={ann.id} className={ann.is_pinned ? 'border-accent' : ''}>
+            <Card key={ann.id} className={ann.is_pinned ? 'border-2 border-accent' : ''}>
               <CardHeader>
                 <div className="flex justify-between items-start gap-2">
                    <CardTitle>{ann.title}</CardTitle>
@@ -142,7 +150,7 @@ export default function AnnouncementsPage() {
               <CardContent className="whitespace-pre-wrap text-sm">
                 {ann.content}
               </CardContent>
-              {/* Add footer for actions if needed */}
+              {/* Add footer for actions if needed (e.g., Admin edit/delete) */}
             </Card>
           ))}
         </div>
@@ -150,3 +158,5 @@ export default function AnnouncementsPage() {
     </div>
   );
 }
+
+    
