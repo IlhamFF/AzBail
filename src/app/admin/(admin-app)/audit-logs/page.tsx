@@ -59,8 +59,8 @@ export default function AuditLogsPage() {
         .from('audit_logs')
         .select(`
           *,
-          users ( email )
-        `, { count: 'exact' })
+          user_details ( email )
+        `, { count: 'exact' }) // Join with user_details to get email
         .order('timestamp', { ascending: false })
         .range(from, to);
 
@@ -71,7 +71,7 @@ export default function AuditLogsPage() {
       if (searchTerm) {
         // Basic search on action, email, target_type, target_id, and details message
         // Note: Searching within JSONB (details->>message) might be slow on large tables without proper indexing.
-        query = query.or(`action.ilike.%${searchTerm}%,users.email.ilike.%${searchTerm}%,target_type.ilike.%${searchTerm}%,target_id.ilike.%${searchTerm}%,details->>message.ilike.%${searchTerm}%`);
+        query = query.or(`action.ilike.%${searchTerm}%,user_details.email.ilike.%${searchTerm}%,target_type.ilike.%${searchTerm}%,target_id.ilike.%${searchTerm}%,details->>message.ilike.%${searchTerm}%`);
       }
 
       const { data, error: fetchError, count } = await query;
@@ -83,7 +83,7 @@ export default function AuditLogsPage() {
 
       const formattedData = data?.map(log => ({
         ...log,
-        user_email: (log.users as any)?.email || 'Sistem', // Safely access nested email
+        user_email: (log.user_details as any)?.email || 'Sistem', // Safely access nested email
       })) || [];
 
       setLogs(formattedData);

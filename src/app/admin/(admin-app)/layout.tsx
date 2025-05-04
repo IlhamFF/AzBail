@@ -25,6 +25,7 @@ import {
   UserPlus, // For Verify Users
   Building, // For Manage Classes
   DatabaseBackup, // For Audit Logs
+  School, // Using School for Manage Subjects
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation'; // Import useRouter
@@ -41,7 +42,7 @@ const adminMenuItems: MenuItem[] = [
   { label: 'Verifikasi Pengguna', icon: UserPlus, path: '/admin/verify-users' },
   { label: 'Manajemen Pengguna', icon: Users, path: '/admin/manage-users' },
   { label: 'Manajemen Kelas', icon: Building, path: '/admin/manage-classes' },
-  { label: 'Manajemen Mapel', icon: BookOpen, path: '/admin/manage-subjects' },
+  { label: 'Manajemen Mapel', icon: School, path: '/admin/manage-subjects' }, // Changed icon
   { label: 'Log Aktivitas', icon: DatabaseBackup, path: '/admin/audit-logs' },
   { label: 'Pengumuman', icon: Bell, path: '/announcements' }, // General page, keep if admin needs access
   // { label: 'Pengaturan', icon: Settings, path: '/settings' }, // General page, keep if admin needs access

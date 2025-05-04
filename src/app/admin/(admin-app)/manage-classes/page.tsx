@@ -43,6 +43,7 @@ interface Class {
   homeroom_teacher_id: string | null;
   homeroom_teacher_name?: string; // Optional, populated after join
   student_count?: number; // Optional, populated after join/count
+  user_details?: { full_name: string } | null; // Structure from join
 }
 
 interface Teacher {
@@ -77,17 +78,29 @@ export default function ManageClassesPage() {
 
    const fetchTeachers = async () => {
         try {
+             // Fetch users with the 'Guru' role from the auth.users table
+             // and join with user_details to get their full names
             const { data, error: fetchError } = await supabase
-                .from('user_details')
-                .select('user_id, full_name')
-                .eq('role', 'Guru'); // Assuming role is in user_details, adjust if it's in auth.users
+                .from('users') // Query the auth.users table
+                .select(`
+                    id,
+                    user_details ( user_id, full_name )
+                `)
+                .eq('role', 'Guru'); // Filter by role in the users table
 
             if (fetchError) throw fetchError;
 
             // Map to the expected Teacher interface structure
-            setTeachers(data?.map(t => ({ id: t.user_id, full_name: t.full_name })) || []);
+            // Filter out teachers who might not have details yet
+            const validTeachers = data
+                ?.filter(t => t.user_details) // Ensure user_details is not null
+                .map(t => ({
+                    id: t.id, // Use the id from auth.users
+                    full_name: (t.user_details as any)?.full_name || 'Nama Guru Tidak Tersedia' // Access nested name
+                 })) || [];
+
+            setTeachers(validTeachers);
         } catch (err: any) {
-            // Handle error fetching teachers (e.g., show a toast)
              console.error('Error fetching teachers:', err);
              toast({ variant: 'destructive', title: 'Error', description: 'Gagal memuat daftar guru.' });
         }
@@ -98,26 +111,30 @@ export default function ManageClassesPage() {
     setLoading(true);
     setError(null);
     try {
-       // Fetch classes and join with user_details to get homeroom teacher's name
+       // Fetch classes and join with user_details via homeroom_teacher_id
         const { data, error: fetchError } = await supabase
         .from('classes')
         .select(`
           id,
           name,
           homeroom_teacher_id,
-          user_details ( full_name )
+          user_details ( user_id, full_name )
         `)
         // Optionally fetch student count per class (more complex query or separate queries)
-        // For simplicity, student count is omitted for now
         .order('name', { ascending: true });
 
 
       if (fetchError) throw fetchError;
 
-      const formattedData: Class[] = data?.map(cls => ({
-        ...cls,
-        homeroom_teacher_name: (cls.user_details as any)?.full_name || '-', // Access nested name safely
-      })) || [];
+        // Adjust mapping based on the direct join from classes to user_details
+       const formattedData: Class[] = data?.map(cls => ({
+           id: cls.id,
+           name: cls.name,
+           homeroom_teacher_id: cls.homeroom_teacher_id,
+           // The join brings user_details directly if homeroom_teacher_id matches a user_id
+           homeroom_teacher_name: (cls.user_details as any)?.full_name || '-',
+       })) || [];
+
 
       setClasses(formattedData);
     } catch (err: any) {
@@ -156,7 +173,13 @@ export default function ManageClassesPage() {
   async function onSubmit(values: ClassFormData) {
     startTransition(async () => {
       const action = editingClass ? updateClass : createClass;
-      const result = await action(editingClass ? editingClass.id : undefined, values);
+      // If homeroom_teacher_id is "null", pass actual null to the action
+      const payload = {
+        ...values,
+        homeroom_teacher_id: values.homeroom_teacher_id === "null" ? null : values.homeroom_teacher_id,
+      };
+      const result = await action(editingClass ? editingClass.id : undefined, payload);
+
 
       if (result.success) {
         toast({
@@ -233,8 +256,8 @@ export default function ManageClassesPage() {
                       <FormLabel>Wali Kelas (Opsional)</FormLabel>
                       <Select
                          onValueChange={field.onChange}
-                         // Ensure value is string or undefined for Select
-                         value={field.value ?? undefined}
+                         // Use "null" string for the "Tidak Ada" option
+                         value={field.value ?? "null"}
                        >
                         <FormControl>
                           <SelectTrigger>
