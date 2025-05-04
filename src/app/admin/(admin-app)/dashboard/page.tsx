@@ -1,4 +1,3 @@
-// src/app/admin/dashboard/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -47,10 +46,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     const fetchStats = async () => {
-      if (!user || user.user_metadata?.role !== 'Admin') {
-          setLoadingStats(false);
-          return;
-      }
+      // No need to check role here, layout handles it
       setLoadingStats(true);
       try {
         // Parallel fetch for counts
@@ -62,6 +58,7 @@ export default function AdminDashboardPage() {
           supabase.from('audit_logs').select('id', { count: 'exact', head: true }).gt('timestamp', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Example: activity in last 24 hours
         ]);
 
+        // Basic error handling for fetch
         if (usersCount.error) throw usersCount.error;
         if (pendingCount.error) throw pendingCount.error;
         if (classesCount.error) throw classesCount.error;
@@ -77,24 +74,26 @@ export default function AdminDashboardPage() {
         });
       } catch (error: any) {
         console.error("Error fetching admin stats:", error);
-        // Handle error display if needed
+        // Handle error display if needed (e.g., show a toast)
       } finally {
         setLoadingStats(false);
       }
     };
 
+     // Fetch stats only if auth is done loading and user exists (layout ensures it's admin)
      if (!authLoading && user) {
         fetchStats();
-     } else if (!authLoading && !user) {
-         setLoadingStats(false);
      }
 
-  }, [user, authLoading]);
+  }, [user, authLoading]); // Depend on user and authLoading
+
+  // Layout handles loading state, but we can show skeleton for stats
+  // if (authLoading || !user) {
+  //   return <div>Loading dashboard...</div>; // Or a more detailed skeleton
+  // }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>
@@ -155,17 +154,19 @@ export default function AdminDashboardPage() {
              <CardDescription>Jumlah pengguna berdasarkan peran.</CardDescription>
            </CardHeader>
            <CardContent>
-             <ChartContainer config={chartConfig} className="h-[250px] w-full">
-               <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={userRoleData} layout="vertical">
-                   <CartesianGrid horizontal={false} />
-                   <XAxis type="number" hide/>
-                   <YAxis dataKey="role" type="category" tickLine={false} tickMargin={10} axisLine={false} width={80} />
-                   <ChartTooltip content={<ChartTooltipContent hideLabel hideIndicator />} cursor={false}/>
-                   <Bar dataKey="count" fill="var(--color-count)" radius={5} />
-                 </BarChart>
-               </ResponsiveContainer>
-             </ChartContainer>
+              {loadingStats ? <Skeleton className="h-[250px] w-full" /> : (
+                <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={userRoleData} layout="vertical">
+                      <CartesianGrid horizontal={false} />
+                      <XAxis type="number" hide/>
+                      <YAxis dataKey="role" type="category" tickLine={false} tickMargin={10} axisLine={false} width={80} />
+                      <ChartTooltip content={<ChartTooltipContent hideLabel hideIndicator />} cursor={false}/>
+                      <Bar dataKey="count" fill="var(--color-count)" radius={5} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
            </CardContent>
          </Card>
          {/* Add more charts or data visualizations here */}
@@ -175,7 +176,7 @@ export default function AdminDashboardPage() {
                   <CardDescription>Example of another chart area.</CardDescription>
               </CardHeader>
               <CardContent className="flex items-center justify-center h-[250px]">
-                  <p className="text-muted-foreground">Chart will be displayed here</p>
+                  {loadingStats ? <Skeleton className="h-32 w-full" /> : <p className="text-muted-foreground">Chart will be displayed here</p>}
               </CardContent>
           </Card>
        </div>

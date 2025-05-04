@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react'; // Import useEffect
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'; // Assuming recharts is installed
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart" // Assuming chart components exist
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 // Helper function to get role from user metadata
 const getUserRole = (user: any): string | null => {
@@ -13,7 +14,7 @@ const getUserRole = (user: any): string | null => {
 };
 
 // Example Data (replace with actual data fetching)
-const adminStats = { users: 120, pendingVerifications: 5, classes: 15 };
+// Removed adminStats as admin dashboard is separate
 const teacherStats = { classes: 3, students: 85, assignmentsDue: 2 };
 const studentStats = { assignmentsDue: 1, upcomingExams: 3, attendancePercentage: 95 };
 const staffStats = { studentsManaged: 500, pendingTasks: 10 };
@@ -51,41 +52,7 @@ const chartConfig = {
    },
 } satisfies ChartConfig
 
-// Role-specific Dashboard Components (Examples)
-const AdminDashboard: React.FC = () => (
-  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">Total Pengguna</CardTitle>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{adminStats.users}</div>
-        <p className="text-xs text-muted-foreground">+2 dari bulan lalu</p>
-      </CardContent>
-    </Card>
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">Verifikasi Tertunda</CardTitle>
-         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="18" x2="18" y1="16" y2="22"/><line x1="21" x2="15" y1="19" y2="19"/></svg>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{adminStats.pendingVerifications}</div>
-         <p className="text-xs text-muted-foreground">Perlu tindakan segera</p>
-      </CardContent>
-    </Card>
-     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">Total Kelas</CardTitle>
-         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2h11A2.5 2.5 0 0 1 20 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 19.5Z"/><path d="M12 12h.01"/></svg>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{adminStats.classes}</div>
-        <p className="text-xs text-muted-foreground">Tahun ajaran ini</p>
-      </CardContent>
-    </Card>
-  </div>
-);
+// Removed AdminDashboard component
 
 const TeacherDashboard: React.FC = () => (
   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -196,8 +163,17 @@ const PrincipalDashboard: React.FC = () => (
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
+  const router = useRouter();
 
-  if (loading) {
+  // Redirect Admin users to their specific dashboard
+  useEffect(() => {
+    if (!loading && user && getUserRole(user) === 'Admin') {
+      router.replace('/admin/dashboard');
+    }
+  }, [user, loading, router]);
+
+
+  if (loading || (user && getUserRole(user) === 'Admin')) { // Show loading if loading or if user is admin (and redirecting)
     return (
       <div>
         <h1 className="text-2xl font-semibold mb-4">Dashboard</h1>
@@ -212,7 +188,7 @@ export default function DashboardPage() {
   }
 
   if (!user) {
-    // Should be handled by layout, but good practice to check
+    // Should be handled by layout/AuthContext, but good practice to check
     return <div>Anda belum login.</div>;
   }
 
@@ -220,8 +196,8 @@ export default function DashboardPage() {
 
   const renderDashboardContent = () => {
     switch (role) {
-      case 'Admin':
-        return <AdminDashboard />;
+      // case 'Admin': // Removed - Admins are redirected
+      //   return <AdminDashboard />;
       case 'Guru':
         return <TeacherDashboard />;
       case 'Siswa':

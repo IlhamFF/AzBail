@@ -27,8 +27,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const getSession = async () => {
-      // Use the imported browser client
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error("Error getting session:", error);
+        setLoading(false);
+        return;
+      }
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -36,32 +40,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     getSession();
 
-    // Use the imported browser client for the listener
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log(`Supabase auth event: ${event}`);
+        const currentUser = session?.user ?? null;
+        const currentUserRole = currentUser?.user_metadata?.role;
+
         setSession(session);
-        setUser(session?.user ?? null);
+        setUser(currentUser);
         setLoading(false);
 
         // Redirect logic based on auth state and current path
         const isAuthPage = pathname === '/login' || pathname === '/register' || pathname === '/admin/login';
-        const isAdminRoute = pathname.startsWith('/admin') && pathname !== '/admin/login';
+        const isAdminRoute = pathname.startsWith('/admin');
+        const isAdminLoginPage = pathname === '/admin/login';
+        const isGeneralDashboard = pathname === '/dashboard';
 
-        if (event === 'SIGNED_IN') {
-            // Redirect non-admins trying to access admin routes
-            if (isAdminRoute && session?.user?.user_metadata?.role !== 'Admin') {
-                await supabase.auth.signOut(); // Sign them out
-                router.push('/login'); // Redirect to general login
-            }
-            // Redirect logged-in users away from auth pages (unless it's admin login for admin)
-            else if (isAuthPage && !(pathname === '/admin/login' && session?.user?.user_metadata?.role === 'Admin')) {
-                 router.push('/dashboard');
-            }
+        if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && currentUser)) {
+             // If Admin logged in or already logged in
+             if (currentUserRole === 'Admin') {
+                 // If Admin is on a non-admin route (and not admin login), redirect to admin dashboard
+                 if (!isAdminRoute && !isAdminLoginPage) {
+                     console.log("AuthContext: Redirecting Admin to /admin/dashboard");
+                     router.replace('/admin/dashboard');
+                 }
+             }
+             // If Non-Admin logged in
+             else {
+                 // If Non-Admin tries to access any admin route, redirect to general dashboard (or login if forced logout)
+                 if (isAdminRoute && !isAdminLoginPage) {
+                     console.log("AuthContext: Redirecting Non-Admin from admin route to /dashboard");
+                     router.replace('/dashboard');
+                     // Optionally sign them out if access should be strictly denied
+                     // await supabase.auth.signOut();
+                     // router.replace('/login');
+                 }
+                 // If Non-Admin is on an auth page, redirect to general dashboard
+                 else if (isAuthPage) {
+                      console.log("AuthContext: Redirecting logged-in Non-Admin from auth page to /dashboard");
+                     router.replace('/dashboard');
+                 }
+             }
         } else if (event === 'SIGNED_OUT') {
-           // Redirect logged-out users trying to access protected areas
+           // Redirect logged-out users trying to access protected areas (non-auth pages, non-root)
            if (!isAuthPage && pathname !== '/') {
-              router.push('/login');
+              console.log("AuthContext: Redirecting signed out user to /login");
+              router.replace('/login');
            }
         }
       }
@@ -70,15 +94,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       authListener?.subscription.unsubscribe();
     };
-  }, [router, pathname]);
+  }, [router, pathname]); // Add router and pathname as dependencies
 
   const signOut = async () => {
     setLoading(true);
-    await supabase.auth.signOut(); // Use the imported browser client
-    setUser(null);
-    setSession(null);
-    // No need to setLoading(false) here, onAuthStateChange will handle it
-    router.push('/login'); // Redirect to login after sign out
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error("Error signing out:", error);
+        toast({ variant: 'destructive', title: 'Gagal Keluar', description: error.message }); // Assuming toast is available or handle error differently
+    }
+    // State updates will be handled by onAuthStateChange
+    // setLoading(false); // Let onAuthStateChange handle loading state
+    router.replace('/login'); // Explicitly redirect to login after sign out
   };
 
   const value = {
@@ -90,15 +117,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Show loading state while determining auth status, except on public/auth pages
   const isPublicPage = pathname === '/login' || pathname === '/register' || pathname === '/admin/login' || pathname === '/';
-   if (loading && !isPublicPage) {
-     return <div>Loading application...</div>; // Or a proper loading component
-   }
+  if (loading && !isPublicPage) {
+    return <div>Loading application...</div>;
+  }
 
   // Prevent rendering protected pages if loading or no user (let useEffect handle redirect)
-   if (!loading && !user && !isPublicPage) {
-       return <div>Redirecting...</div>; // Or loading state
-   }
+  if (!loading && !user && !isPublicPage) {
+      // Don't render children, allow redirect logic in useEffect to execute
+      return <div>Redirecting...</div>; // Or a loading spinner
+  }
 
+  // If user is Admin but not yet on an admin route, show loading/redirecting until useEffect handles it
+  if (!loading && user?.user_metadata?.role === 'Admin' && !pathname.startsWith('/admin') && pathname !== '/admin/login') {
+      return <div>Redirecting to Admin Dashboard...</div>;
+  }
 
   return (
     <AuthContext.Provider value={value}>

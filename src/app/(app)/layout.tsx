@@ -13,16 +13,15 @@ import {
   SidebarTrigger,
   SidebarInset,
   SidebarMenuSub,
-  SidebarMenuSubButton, // Corrected import
+  SidebarMenuSubButton,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenuSkeleton,
-  SidebarMenuSubItem // Added import
+  SidebarMenuSubItem
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-// import { Button } from '@/components/ui/button'; // Button only used for logout, handled by SidebarMenuButton
 import {
-  LayoutDashboard,
+  LayoutDashboard, // Keep for potential future non-admin use, or general dashboard icon
   Users,
   BookOpen,
   Calendar,
@@ -32,7 +31,7 @@ import {
   Settings,
   LogOut,
   FileText,
-  Building,
+  Building, // Keep if needed for non-admin views
   DollarSign,
   Bell,
   UserCheck,
@@ -42,17 +41,18 @@ import {
   Warehouse,
   CreditCard,
   FileSignature,
-  BookMarked, // Example for Materi
-  Home, // Example for Dashboard
-  UserCog, // Example for Profile/Settings
-  ChevronDown, // For sub-menu indicator
-  UserPlus, // For Verify Users
-  DatabaseBackup // Example for Audit Logs, could use ClipboardList too
+  BookMarked,
+  Home,
+  UserCog,
+  ChevronDown,
+  // Remove admin-specific icons if not used elsewhere
+  // UserPlus,
+  // DatabaseBackup,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation'; // Import usePathname
 
-// Define menu items based on roles
+// Define menu items based on roles (excluding Admin)
 interface MenuItem {
   label: string;
   icon: React.ElementType;
@@ -60,25 +60,16 @@ interface MenuItem {
   subItems?: { label: string; path: string }[];
 }
 
+// Updated menu items, removing Admin-specific ones for this layout
 const menuItems: Record<string, MenuItem[]> = {
-  Admin: [
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' }, // Use LayoutDashboard for admin dashboard
-    { label: 'Verifikasi Pengguna', icon: UserPlus, path: '/admin/verify-users' },
-    { label: 'Manajemen Pengguna', icon: Users, path: '/admin/manage-users' },
-    { label: 'Manajemen Kelas', icon: Building, path: '/admin/manage-classes' },
-    { label: 'Manajemen Mapel', icon: BookOpen, path: '/admin/manage-subjects' },
-    { label: 'Log Aktivitas', icon: DatabaseBackup, path: '/admin/audit-logs' },
-    { label: 'Pengumuman', icon: Bell, path: '/announcements' }, // General page
-    { label: 'Pengaturan', icon: Settings, path: '/settings' }, // General page
-  ],
   Guru: [
     { label: 'Dashboard', icon: Home, path: '/dashboard' },
     { label: 'Jadwal Mengajar', icon: Calendar, path: '/teacher/schedule' },
-    { label: 'Manajemen Kelas', icon: Users, path: '/teacher/manage-class' }, // View students, maybe attendance shortcut
+    { label: 'Manajemen Kelas', icon: Users, path: '/teacher/manage-class' },
     {
       label: 'Akademik',
       icon: GraduationCap,
-      path: '#', // Indicate it's a dropdown trigger
+      path: '#',
       subItems: [
         { label: 'Input Nilai', path: '/teacher/grades' },
         { label: 'Input Absensi', path: '/teacher/attendance' },
@@ -135,22 +126,20 @@ const getUserAvatarUrl = (user: any): string | undefined => {
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, signOut, loading } = useAuth(); // Only need user info and signout
-  const pathname = usePathname(); // Get current path
+  const { user, signOut, loading } = useAuth();
+  const pathname = usePathname();
 
   // Determine role and menu items, handle loading/no user state gracefully
   const userRole = loading ? null : getUserRole(user);
+  // Use empty array if userRole is null, Admin, or not found in menuItems
   const currentMenuItems = (!loading && userRole && menuItems[userRole]) ? menuItems[userRole] : [];
   const userName = loading ? 'Loading...' : (user ? getUserFullName(user) : 'Pengguna');
   const userAvatar = loading ? undefined : (user ? getUserAvatarUrl(user) : undefined);
 
 
-   // Loading state for the layout itself can be simplified as AuthProvider handles the main loading/redirect
    if (loading) {
-      // You might want a minimal loading UI within the layout structure
       return (
           <div className="flex min-h-screen">
-             {/* Basic Sidebar structure during load */}
              <Sidebar collapsible="icon">
                  <SidebarHeader className="p-4"><Skeleton className="h-8 w-8 rounded-full" /><Skeleton className="h-4 w-20 ml-2" /></SidebarHeader>
                  <SidebarContent><SidebarMenuSkeleton showIcon /><SidebarMenuSkeleton showIcon /></SidebarContent>
@@ -163,18 +152,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       );
    }
 
-   // If somehow layout renders without user (middleware/AuthProvider should prevent this for protected routes)
+   // If layout renders without user (AuthContext should handle redirect)
    if (!user) {
-       // This case should ideally not happen for routes using this layout due to protection
-       // You could return null or a redirecting message, but middleware is better
-       return null; // Or redirect logic if necessary, though middleware is preferred
+       return null;
    }
 
-  // Function to check if a menu item or sub-item is active
-  // Updated logic: checks for exact match or if the current path starts with the item path followed by a '/'
+   // If layout renders for an Admin user (AuthContext should handle redirect)
+   if (userRole === 'Admin') {
+       // Return minimal loading/redirecting state or null
+       return null;
+   }
+
   const isItemActive = (path: string): boolean => {
-    if (path === '#') return false; // Dropdown triggers are never active themselves
-    // Exact match or parent path match for sub-routes
+    if (path === '#') return false;
     return pathname === path || (path !== '/' && pathname.startsWith(path + '/'));
   };
 
@@ -188,36 +178,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <AvatarImage src={userAvatar} alt={userName} />
               <AvatarFallback>{userName.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
-            <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden truncate max-w-[100px]">
-              {userName}
-            </span>
+             <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+                <span className="font-semibold text-sm truncate max-w-[100px]">
+                    {userName}
+                </span>
+                 {userRole && <span className="text-xs text-muted-foreground">{userRole}</span>}
+             </div>
           </div>
-           {/* Mobile Trigger */}
            <SidebarTrigger className="md:hidden" />
         </SidebarHeader>
 
         <SidebarContent>
-           {/* Desktop Trigger - positioned absolutely or within header */}
            <div className="hidden md:flex justify-end p-2 group-data-[collapsible=icon]:justify-center">
                <SidebarTrigger />
            </div>
           <SidebarMenu>
-            {currentMenuItems.length === 0 && userRole && (
+            {/* Render menu only if it's not an admin */}
+            {userRole !== 'Admin' && currentMenuItems.length === 0 && userRole && (
               <SidebarMenuItem>
-                 <div className="p-2 text-muted-foreground text-sm">Menu tidak tersedia.</div>
+                 <div className="p-2 text-muted-foreground text-sm">Menu tidak tersedia untuk peran Anda.</div>
               </SidebarMenuItem>
              )}
-            {currentMenuItems.map((item, index) => (
+            {userRole !== 'Admin' && currentMenuItems.map((item, index) => (
               <SidebarMenuItem key={index}>
                 {item.subItems ? (
-                  // Group for items with submenus
-                  // Using simple disclosure for now, Accordion can be complex here
                   <SidebarGroup>
-                      {/* Sub-menu Trigger Button */}
                      <SidebarMenuButton
-                         aria-expanded="false" // Manage state if using Accordion
+                         aria-expanded="false"
                          className="justify-between"
-                         isActive={item.subItems.some(sub => isItemActive(sub.path))} // Highlight if any sub-item is active
+                         isActive={item.subItems.some(sub => isItemActive(sub.path))}
                      >
                          <div className="flex items-center gap-2">
                              <item.icon />
@@ -225,7 +214,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                          </div>
                          <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
                      </SidebarMenuButton>
-                     {/* Sub-menu Content */}
                      <SidebarMenuSub>
                        {item.subItems.map((subItem, subIndex) => (
                          <SidebarMenuSubItem key={subIndex}>
@@ -240,7 +228,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </SidebarGroup>
 
                 ) : (
-                  // Regular menu item
                   <Link href={item.path} passHref legacyBehavior>
                     <SidebarMenuButton asChild tooltip={item.label} isActive={isItemActive(item.path)}>
                       <a>
@@ -277,13 +264,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
 
-      {/* SidebarInset wraps the main content area */}
        <SidebarInset className="flex-1 overflow-auto">
-            {/* Optional Header for main content area */}
              <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 sm:py-4">
-                 <h1 className="text-xl font-semibold">EduPortal {userRole ? `(${userRole})` : ''}</h1>
+                 {/* General Header Title */}
+                 <h1 className="text-xl font-semibold">EduPortal</h1>
              </header>
-              {/* Main content */}
               <main className="flex-1 p-4 md:p-6">
                    {children}
               </main>
@@ -292,5 +277,3 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-    
