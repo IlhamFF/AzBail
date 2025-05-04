@@ -1,3 +1,4 @@
+```typescript
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase/admin'; // Use the admin client
@@ -50,3 +51,5 @@ export async function deleteUser(userId: string): Promise<DeleteUserResult> {
     return { success: false, message: error.message || 'Terjadi kesalahan server saat menghapus pengguna.' };
   }
 }
+
+```

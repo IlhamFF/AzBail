@@ -188,7 +188,7 @@ export default function ManageUsersPage() {
                <PlusCircle className="mr-2 h-4 w-4" /> Tambah Pengguna
              </Button> */}
           </div>
-          {/* Search and Filter */}
+          {/* Filtering and Searching */}
           <div className="flex flex-col sm:flex-row gap-2 pt-4">
              <div className="relative flex-1 md:grow-0">
                 <Search className="absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" />
@@ -270,56 +270,54 @@ export default function ManageUsersPage() {
                   </TableRow>
                 )}
 
-                {!loading && !error && users.length > 0 && (
-                  users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.full_name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell><Badge variant="secondary">{user.role || 'N/A'}</Badge></TableCell>
-                      <TableCell>
-                        <Badge variant={user.is_verified ? 'default' : 'destructive'}>
-                          {user.is_verified ? 'Terverifikasi' : 'Belum'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: id })}</TableCell>
-                      <TableCell className="text-right space-x-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" disabled> {/* TODO: Implement Edit */}
-                          <Edit className="h-4 w-4" />
-                          <span className="sr-only">Edit</span>
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" disabled={isPending}>
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Hapus</span>
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle className="flex items-center gap-2">
-                                <AlertTriangle className="text-destructive" /> Konfirmasi Penghapusan
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Apakah Anda yakin ingin menghapus pengguna <strong>{user.full_name || user.email}</strong>? Tindakan ini tidak dapat diurungkan dan akan menghapus data autentikasi pengguna.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel disabled={isPending}>Batal</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeleteUser(user.id, user.full_name)}
-                                disabled={isPending}
-                                className="bg-destructive hover:bg-destructive/90"
-                              >
-                                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Hapus
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                {!loading && !error && users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.full_name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell><Badge variant="secondary">{user.role || 'N/A'}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant={user.is_verified ? 'default' : 'destructive'}>
+                        {user.is_verified ? 'Terverifikasi' : 'Belum'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: id })}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled> {/* TODO: Implement Edit */}
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit</span>
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" disabled={isPending}>
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Hapus</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                              <AlertTriangle className="text-destructive" /> Konfirmasi Penghapusan
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Apakah Anda yakin ingin menghapus pengguna <strong>{user.full_name || user.email}</strong>? Tindakan ini tidak dapat diurungkan dan akan menghapus data autentikasi pengguna.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isPending}>Batal</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteUser(user.id, user.full_name)}
+                              disabled={isPending}
+                              className="bg-destructive hover:bg-destructive/90"
+                            >
+                              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              Hapus
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
            </div>
@@ -359,3 +357,4 @@ export default function ManageUsersPage() {
     </div>
   );
 }
+```
