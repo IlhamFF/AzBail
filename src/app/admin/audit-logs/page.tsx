@@ -11,8 +11,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Search, Filter, UserCircle, Info, List } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Filter, UserCircle, Info, List, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area'; // Import ScrollArea for JSON display
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Import Alert component
 
 interface AuditLog {
   id: string;
@@ -53,6 +54,7 @@ export default function AuditLogsPage() {
     const to = from + ITEMS_PER_PAGE - 1;
 
     try {
+      // IMPORTANT: Ensure RLS policies allow Admins to select from 'audit_logs' and join 'users'.
       let query = supabase
         .from('audit_logs')
         .select(`
@@ -68,18 +70,20 @@ export default function AuditLogsPage() {
 
       if (searchTerm) {
         // Basic search on action, email, target_type, target_id, and details message
+        // Note: Searching within JSONB (details->>message) might be slow on large tables without proper indexing.
         query = query.or(`action.ilike.%${searchTerm}%,users.email.ilike.%${searchTerm}%,target_type.ilike.%${searchTerm}%,target_id.ilike.%${searchTerm}%,details->>message.ilike.%${searchTerm}%`);
       }
 
       const { data, error: fetchError, count } = await query;
 
       if (fetchError) {
-        throw fetchError;
+        console.error('Supabase fetch audit logs error:', fetchError); // Log the detailed error
+        throw fetchError; // Rethrow the error
       }
 
       const formattedData = data?.map(log => ({
         ...log,
-        user_email: (log.users as any)?.email || 'Sistem',
+        user_email: (log.users as any)?.email || 'Sistem', // Safely access nested email
       })) || [];
 
       setLogs(formattedData);
@@ -87,7 +91,7 @@ export default function AuditLogsPage() {
 
     } catch (err: any) {
       console.error('Error fetching audit logs:', err);
-      setError('Gagal memuat log aktivitas.');
+      setError(`Gagal memuat log aktivitas: ${err.message || 'Terjadi kesalahan server.'}`);
     } finally {
       setLoading(false);
     }
@@ -115,6 +119,10 @@ export default function AuditLogsPage() {
       setCurrentPage(newPage);
     }
   };
+
+  const formatActionName = (action: string) => {
+    return action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  }
 
   const formatDetails = (details: any) => {
     if (!details) return '-';
@@ -155,12 +163,21 @@ export default function AuditLogsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Aksi</SelectItem>
-                {ACTIONS.map(action => <SelectItem key={action} value={action}>{action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</SelectItem>)}
+                {ACTIONS.map(action => <SelectItem key={action} value={action}>{formatActionName(action)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
         </CardHeader>
         <CardContent>
+          {/* Error Display */}
+           {error && (
+             <Alert variant="destructive" className="mb-4">
+               <AlertTriangle className="h-4 w-4" />
+               <AlertTitle>Error</AlertTitle>
+               <AlertDescription>{error}</AlertDescription>
+             </Alert>
+          )}
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -184,11 +201,6 @@ export default function AuditLogsPage() {
                     </TableRow>
                   ))
                 )}
-                {!loading && error && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-destructive py-10">{error}</TableCell>
-                  </TableRow>
-                )}
                 {!loading && !error && logs.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
@@ -202,28 +214,30 @@ export default function AuditLogsPage() {
                        {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true, locale: id })}
                     </TableCell>
                     <TableCell className="text-sm font-medium flex items-center gap-2">
-                       <UserCircle className="h-4 w-4 text-muted-foreground" />
-                       {log.user_email}
+                       <UserCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                       <span className='truncate' title={log.user_email}>{log.user_email}</span>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs whitespace-nowrap">
                          <List className="h-3 w-3 mr-1" />
-                         {log.action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                         {formatActionName(log.action)}
                        </Badge>
                     </TableCell>
                      <TableCell className="text-xs text-muted-foreground">
                         {log.target_type && log.target_id ? (
                            <div className='flex flex-col'>
-                              <span>Tipe: {log.target_type}</span>
-                              <span>ID: {log.target_id.substring(0, 8)}...</span>
+                              <span className='font-medium'>{log.target_type}</span>
+                              <span className='truncate' title={log.target_id}>{log.target_id.substring(0, 8)}...</span>
                            </div>
                         ) : '-'}
                     </TableCell>
                     <TableCell className="text-xs max-w-xs">
                        <details>
                           <summary className="cursor-pointer text-muted-foreground hover:text-foreground flex items-center gap-1">
-                             <Info className="h-3 w-3" />
-                             {log.details?.message || (log.details ? 'Lihat JSON' : '-')}
+                             <Info className="h-3 w-3 flex-shrink-0" />
+                             <span className="truncate">
+                                {log.details?.message || (log.details && typeof log.details === 'object' ? 'Lihat JSON' : String(log.details) || '-')}
+                             </span>
                           </summary>
                           {log.details && typeof log.details === 'object' && (
                               <ScrollArea className="mt-2 max-h-40 w-full rounded-md border p-2 bg-muted/50">

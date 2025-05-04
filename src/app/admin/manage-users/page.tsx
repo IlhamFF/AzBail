@@ -25,6 +25,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { deleteUser } from '@/actions/admin/deleteUser'; // Import the server action
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Import Alert component
 
 interface ManagedUser {
   id: string; // User UUID from users table
@@ -58,6 +59,7 @@ export default function ManageUsersPage() {
     const to = from + ITEMS_PER_PAGE - 1;
 
     try {
+      // IMPORTANT: Ensure RLS policies allow Admins to select from 'users' and 'user_details'.
       let query = supabase
         .from('users')
         .select(`
@@ -90,7 +92,8 @@ export default function ManageUsersPage() {
       const { data, error: fetchError, count } = await query;
 
       if (fetchError) {
-        throw fetchError;
+        console.error('Supabase fetch users error:', fetchError); // Log the detailed error
+        throw fetchError; // Rethrow the error to be caught by the catch block
       }
 
       const formattedData: ManagedUser[] = data?.map(user => ({
@@ -107,7 +110,8 @@ export default function ManageUsersPage() {
 
     } catch (err: any) {
       console.error('Error fetching users:', err);
-      setError('Gagal memuat daftar pengguna.');
+      // Display a more specific error message
+      setError(`Gagal memuat daftar pengguna: ${err.message || 'Terjadi kesalahan server.'}`);
       toast({
         variant: 'destructive',
         title: 'Gagal Memuat Data',
@@ -132,7 +136,12 @@ export default function ManageUsersPage() {
           description: `Pengguna ${userName || userId} berhasil dihapus.`,
         });
         // Refetch data for the current page after deletion
-        fetchUsers();
+        // Check if it was the last item on the page
+         if (users.length === 1 && currentPage > 1) {
+           setCurrentPage(currentPage - 1);
+         } else {
+           fetchUsers();
+         }
       } else {
         toast({
           variant: 'destructive',
@@ -215,6 +224,15 @@ export default function ManageUsersPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Error Display */}
+          {error && (
+             <Alert variant="destructive" className="mb-4">
+               <AlertTriangle className="h-4 w-4" />
+               <AlertTitle>Error</AlertTitle>
+               <AlertDescription>{error}</AlertDescription>
+             </Alert>
+          )}
+
           <div className="overflow-x-auto">
              <Table>
               <TableHeader>
@@ -242,12 +260,6 @@ export default function ManageUsersPage() {
                       </TableCell>
                     </TableRow>
                   ))
-                )}
-
-                {!loading && error && (
-                   <TableRow>
-                     <TableCell colSpan={6} className="text-center text-destructive">{error}</TableCell>
-                   </TableRow>
                 )}
 
                 {!loading && !error && users.length === 0 && (
@@ -322,7 +334,7 @@ export default function ManageUsersPage() {
                        variant="outline"
                        size="sm"
                        onClick={() => handlePageChange(currentPage - 1)}
-                       disabled={currentPage === 1 || loading}
+                       disabled={currentPage === 1 || loading || isPending}
                    >
                        <ChevronLeft className="h-4 w-4" />
                        <span className="hidden sm:inline ml-1">Sebelumnya</span>
@@ -334,7 +346,7 @@ export default function ManageUsersPage() {
                        variant="outline"
                        size="sm"
                        onClick={() => handlePageChange(currentPage + 1)}
-                       disabled={currentPage === totalPages || loading}
+                       disabled={currentPage === totalPages || loading || isPending}
                    >
                        <span className="hidden sm:inline mr-1">Berikutnya</span>
                        <ChevronRight className="h-4 w-4" />
