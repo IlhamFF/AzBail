@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';  // Import useEffect
+import { useState, useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
@@ -12,7 +12,7 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
+  FormLabel, // Keep this for the actual form
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ const formSchema = z.object({
   password: z.string().min(6, { message: 'Password minimal 6 karakter.' }),
 });
 
+// Loading Placeholder Component
 const LoadingPlaceholder = () => (
   <div className="flex min-h-screen items-center justify-center bg-background p-4">
     <Card className="w-full max-w-md shadow-lg">
@@ -40,11 +41,13 @@ const LoadingPlaceholder = () => (
       <CardContent>
         <div className="space-y-6">
           <div className="space-y-2">
-            <FormLabel>Email</FormLabel>
+            {/* Use standard label or div instead of FormLabel */}
+            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Email</label>
             <Input placeholder="contoh@email.com" disabled />
           </div>
           <div className="space-y-2">
-            <FormLabel>Password</FormLabel>
+             {/* Use standard label or div instead of FormLabel */}
+            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Password</label>
             <Input type="password" placeholder="******" disabled />
           </div>
           <Button className="w-full" disabled>
@@ -60,18 +63,15 @@ const LoadingPlaceholder = () => (
   </div>
 );
 
-
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const { user, loading: authLoading } = useAuth(); // Renamed loading to authLoading
-  const [isInitialRender, setIsInitialRender] = useState(true); // State to track initial render
-
+  const { user, loading } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!loading && user) {
       const userRole = user.user_metadata?.role;
       if (userRole === 'Admin') {
         router.push('/admin/dashboard');
@@ -79,11 +79,7 @@ export default function LoginPage() {
         router.push('/dashboard');
       }
     }
-    // Set initial render to false after first effect run
-    if (!authLoading) {
-      setIsInitialRender(false);
-    }
-  }, [user, authLoading, router]);
+  }, [user, loading, router]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -96,19 +92,14 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      console.log("Login attempt:", values.email); // Add this line
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
 
       if (error) {
-        console.error("Supabase sign-in error:", error.message); // Add this line
         throw error;
       }
-
-      console.log("Login success:", data); // Add this line
 
       const userRole = data.user?.user_metadata?.role;
 
@@ -137,11 +128,10 @@ export default function LoginPage() {
     }
   }
 
-   // Render loading placeholder during initial check and redirection to prevent hydration mismatch
-   if (isInitialRender || authLoading || user) {
-     return <LoadingPlaceholder />;
-   }
-
+  // Render loading placeholder while checking auth status or if user exists (before redirect)
+  if (loading || user) {
+    return <LoadingPlaceholder />;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -153,14 +143,14 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Form {...form}>
+          <Form {...form}> {/* This provides the context for the actual form */}
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel>Email</FormLabel> {/* This FormLabel is fine */}
                     <FormControl>
                       <Input placeholder="contoh@email.com" {...field} />
                     </FormControl>
@@ -173,7 +163,7 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>Password</FormLabel> {/* This FormLabel is fine */}
                     <FormControl>
                       <Input type="password" placeholder="******" {...field} />
                     </FormControl>
