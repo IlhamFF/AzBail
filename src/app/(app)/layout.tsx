@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation'; // Import usePathname
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 // Define menu items based on roles (excluding Admin)
 interface MenuItem {
