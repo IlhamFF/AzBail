@@ -1,5 +1,7 @@
 'use client';
 
+// src/app/(auth)/login/page.tsx
+
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,7 +14,7 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormLabel, // Keep this for the actual form
+  FormLabel,
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -28,7 +30,7 @@ const formSchema = z.object({
   password: z.string().min(6, { message: 'Password minimal 6 karakter.' }),
 });
 
-// Loading Placeholder Component
+// Loading Placeholder Component - Removed useFormField hook usage
 const LoadingPlaceholder = () => (
   <div className="flex min-h-screen items-center justify-center bg-background p-4">
     <Card className="w-full max-w-md shadow-lg">
@@ -63,6 +65,7 @@ const LoadingPlaceholder = () => (
   </div>
 );
 
+
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -92,15 +95,18 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
+        console.log("Login attempt:", values.email); // Add this line
       const { data, error } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
 
       if (error) {
+          console.error("Supabase sign-in error:", error.message); // Add this line
         throw error;
       }
 
+        console.log("Login success:", data); // Add this line
       const userRole = data.user?.user_metadata?.role;
 
       if (userRole === 'Admin') {
