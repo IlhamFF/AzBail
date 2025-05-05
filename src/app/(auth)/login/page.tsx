@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { Label } from '@/components/ui/label'; // Import Label component
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Format email tidak valid.' }),
@@ -133,7 +134,7 @@ export default function LoginPage() {
 
   // Show loading state while checking auth status
   if (loading) {
-    return <LoadingPlaceholder />;
+    return <LoadingPlaceholder />; // Use the LoadingPlaceholder component
   }
 
   // Don't render login form if user is already logged in (and redirection hasn't happened yet)
@@ -142,8 +143,8 @@ export default function LoginPage() {
   }
 
   return (
-    // Apply margin to Card for centering and spacing
-    <Card className="w-full max-w-md shadow-lg mx-auto mt-20 mb-20"> {/* Use mx-auto for horizontal centering, mt/mb for vertical spacing */}
+    // Remove the outer flex container
+    <Card className="w-full max-w-md shadow-lg mx-auto my-20"> {/* Use mx-auto and my-20 for centering */}
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-center">EduPortal Login</CardTitle>
         <CardDescription className="text-center">
