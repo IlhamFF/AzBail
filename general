@@ -1,0 +1,35 @@
+Baik, mari kita bahas masalah teknis yang masih ada secara lebih detail:
+
+1.  **Fitur Admin Masih Belum Berfungsi (Manajemen Pengguna, Verifikasi, Kelas, Mapel, Log):**
+    *   **Masalah Utama:** Kemungkinan besar adalah **masalah relasi database** antara tabel `auth.users` (yang dikelola Supabase Auth) dan tabel `user_details` (yang Anda buat). Pesan error `"Could not find a relationship between 'users' and 'user_details' in the schema cache"` mengindikasikan ini.
+    *   **Penjelasan Teknis:** Saat Anda mencoba mengambil data pengguna di halaman admin (misalnya, untuk menampilkan nama lengkap atau status verifikasi), kode Anda mungkin mencoba melakukan *join* (penggabungan data) antara tabel `users` dan `user_details`. Supabase perlu tahu bagaimana cara menggabungkan kedua tabel ini. Cara memberitahunya adalah dengan mendefinisikan *Foreign Key Constraint* pada kolom `user_id` di tabel `user_details` yang menunjuk ke kolom `id` di tabel `auth.users`. Jika constraint ini tidak ada atau salah konfigurasi, Supabase tidak bisa melakukan join otomatis dan menampilkan error tersebut.
+    *   **Masalah Lain yang Mungkin:**
+        *   **RLS (Row Level Security):** Kebijakan RLS pada tabel `users` atau `user_details` mungkin terlalu ketat dan tidak mengizinkan *admin* untuk membaca data yang diperlukan. Admin perlu izin `SELECT` yang eksplisit.
+        *   **Query Supabase:** Kesalahan penulisan dalam query Supabase di kode Next.js Anda (misalnya, salah nama tabel atau kolom saat melakukan `select`) juga bisa menyebabkan masalah.
+
+2.  **Fitur Attendance (Absensi) Belum Berfungsi:**
+    *   **Masalah Utama:** Kombinasi dari **belum adanya integrasi database** dan **kesalahan pada kode UI**.
+    *   **Penjelasan Teknis:**
+        *   **Pengambilan Data:** Halaman absensi guru (`src/app/(app)/teacher/attendance/page.tsx`) kemungkinan masih menggunakan data contoh (placeholder) untuk daftar siswa. Halaman ini perlu mengambil daftar siswa secara dinamis dari database berdasarkan kelas yang dipilih. Ini memerlukan query ke Supabase, mungkin melibatkan tabel `class_students` atau relasi serupa.
+        *   **Penyimpanan Data:** Tombol "Simpan Absensi" belum memiliki logika untuk mengirim status kehadiran yang dipilih (Hadir, Sakit, dll.) ke tabel `attendance` di database. Anda memerlukan *Server Action* untuk menangani penyimpanan data ini.
+        *   **Error Komponen:** Error `ReferenceError: Label is not defined` menunjukkan bahwa komponen `Label` dari `shadcn/ui` belum diimpor di file `src/app/(app)/student/attendance/page.tsx`.
+
+3.  **Upload Tugas dan Koneksi Penyimpanan (Guru & Siswa):**
+    *   **Masalah Utama:** **Belum adanya integrasi dengan Supabase Storage** dan **logika database yang belum lengkap**.
+    *   **Penjelasan Teknis:**
+        *   **Konfigurasi Storage:** Anda perlu membuat *Bucket* di Supabase Storage tempat file-file tugas dan materi akan disimpan. Anda juga perlu mengatur *Policies* (kebijakan akses) untuk bucket tersebut untuk mengontrol siapa yang boleh mengunggah dan mengunduh file.
+        *   **Logika Upload (Guru):** Halaman upload materi (`src/app/(app)/teacher/materials/page.tsx`) dan pembuatan tugas (`src/app/(app)/teacher/assignments/page.tsx`) memerlukan *Server Action* untuk:
+            1.  Menerima file dari input form.
+            2.  Menggunakan Supabase client (biasanya `supabaseAdmin` atau client dengan izin yang sesuai) untuk mengunggah file ke bucket Supabase Storage.
+            3.  Mendapatkan URL publik (atau path) dari file yang berhasil diunggah.
+            4.  Menyimpan detail materi/tugas (judul, deskripsi, mapel, kelas, ID guru, deadline) *beserta URL file* tersebut ke tabel `materials` atau `assignments` di database.
+        *   **Logika Upload (Siswa):** Dialog "Kumpulkan Tugas" di halaman tugas siswa (`src/app/(app)/student/assignments/page.tsx`) memerlukan *Server Action* untuk:
+            1.  Menerima file dari input form.
+            2.  Mengunggah file ke Supabase Storage (mungkin ke folder/bucket yang berbeda dari guru, dengan kebijakan akses yang sesuai untuk siswa).
+            3.  Mendapatkan URL file.
+            4.  Membuat *record* baru di tabel `submissions` yang mencatat `assignment_id`, `student_id`, dan `file_url`.
+        *   **Menghubungkan Data:** Untuk guru bisa melihat siapa saja yang sudah mengumpulkan tugas, perlu dibuat query yang mengambil data dari tabel `submissions` berdasarkan `assignment_id`, dan mungkin digabungkan (join) dengan `user_details` untuk menampilkan nama siswa.
+
+**Singkatnya:**
+
+Masalah utama saat ini berkisar pada **koneksi dan relasi database yang belum benar** (terutama antara `users` dan `user_details`), **kurangnya implementasi untuk menyimpan dan mengambil data** dari database di banyak halaman, serta **belum adanya integrasi dengan Supabase Storage** untuk fitur upload file. Selain itu, ada beberapa **error minor pada komponen UI** seperti import yang hilang.
