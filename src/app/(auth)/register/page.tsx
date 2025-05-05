@@ -59,6 +59,8 @@ export default function RegisterPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
+      console.log("Registration attempt:", values.email); // Add this line
+
       // 1. Sign up the user with Supabase Auth using browser client
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: values.email,
@@ -75,12 +77,15 @@ export default function RegisterPage() {
       });
 
       if (signUpError) {
+        console.error("Supabase sign-up error:", signUpError.message); // Add this line
         // Handle specific errors like email already exists
         if (signUpError.message.includes('unique constraint') || signUpError.message.includes('already registered')) {
            throw new Error('Email sudah terdaftar. Silakan gunakan email lain atau login.');
         }
         throw signUpError;
       }
+
+      console.log("Sign-up success:", signUpData); // Add this line
 
       if (!signUpData.user) {
         throw new Error('Gagal membuat pengguna. Silakan coba lagi.');
@@ -94,12 +99,19 @@ export default function RegisterPage() {
         .insert({
           user_id: signUpData.user.id,
           full_name: values.fullName,
+          email: values.email, // Tambahkan email
+          role: values.role, // Tambahkan role
           // Add other fields like phone, address etc. if collected during registration
         });
 
       if (detailError) {
         // Log error but proceed with signup message, as auth user is created.
-        console.error('Error inserting user details during registration:', detailError);
+        console.error('Error inserting user details:', detailError);
+        toast({
+          variant: 'destructive',
+          title: 'Registrasi Berhasil, tetapi gagal menyimpan detail profil.',
+          description: detailError.message,
+        });
         // Optionally inform the user or trigger an admin notification
       }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Import useEffect
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client'; // Use browser client
 import { useToast } from '@/hooks/use-toast';
@@ -21,7 +21,7 @@ export default function AdminLoginPage() {
   const { user: authUser, loading: authLoading } = useAuth(); // Get auth state
 
    // Redirect if already logged in as admin
-   React.useEffect(() => {
+   useEffect(() => {
     if (!authLoading && authUser && authUser.user_metadata?.role === 'Admin') {
       router.push('/admin/dashboard'); // Or your main admin page
     }
@@ -78,7 +78,7 @@ export default function AdminLoginPage() {
 
    // Prevent rendering form if already logged in and redirecting
    if (authLoading || (authUser && authUser.user_metadata?.role === 'Admin')) {
-     return <div>Loading or redirecting...</div>;
+     return <div className="flex min-h-screen items-center justify-center">Loading or redirecting...</div>;
    }
 
   return (

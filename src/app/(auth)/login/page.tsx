@@ -1,12 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -19,10 +18,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase/client'; // Use browser client
+import { supabase } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext'; // Import useAuth
+import { useAuth } from '@/context/AuthContext';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Format email tidak valid.' }),
@@ -33,21 +32,19 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const { user, loading } = useAuth(); // Get user and loading state
+  const { user, loading } = useAuth();
 
   // Redirect if already logged in
-  React.useEffect(() => {
+  useEffect(() => {
     if (!loading && user) {
-        // Check role for appropriate redirection
-        const userRole = user.user_metadata?.role;
-        if (userRole === 'Admin') {
-            router.push('/admin/dashboard');
-        } else {
-            router.push('/dashboard');
-        }
+      const userRole = user.user_metadata?.role;
+      if (userRole === 'Admin') {
+        router.push('/admin/dashboard');
+      } else {
+        router.push('/dashboard');
+      }
     }
   }, [user, loading, router]);
-
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -60,36 +57,35 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      // Use the browser client
-      const { error, data } = await supabase.auth.signInWithPassword({
+      console.log("Login attempt:", values.email); // Add this line
+
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
 
       if (error) {
+        console.error("Supabase sign-in error:", error.message); // Add this line
         throw error;
       }
 
-      // Check role after successful sign-in
+      console.log("Login success:", data); // Add this line
+
       const userRole = data.user?.user_metadata?.role;
 
       if (userRole === 'Admin') {
-         toast({
-            title: 'Login Berhasil (Admin)',
-            description: 'Mengalihkan ke dashboard admin...',
-         });
-         // Redirect explicitly here or let AuthContext handle it
-         router.push('/admin/dashboard');
+        toast({
+          title: 'Login Berhasil (Admin)',
+          description: 'Mengalihkan ke dashboard admin...',
+        });
+        router.push('/admin/dashboard');
       } else {
-         toast({
-           title: 'Login Berhasil',
-           description: 'Anda akan diarahkan ke dashboard.',
-         });
-         // Redirect explicitly here or let AuthContext handle it
-         router.push('/dashboard');
+        toast({
+          title: 'Login Berhasil',
+          description: 'Anda akan diarahkan ke dashboard.',
+        });
+        router.push('/dashboard');
       }
-      // AuthProvider's onAuthStateChange might also handle redirection, ensure consistency
-
     } catch (error: any) {
       console.error('Login error:', error);
       toast({
@@ -102,16 +98,15 @@ export default function LoginPage() {
     }
   }
 
-    // Show loading state while checking auth status
-    if (loading) {
-        return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
-    }
+  // Show loading state while checking auth status
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+  }
 
-    // Don't render login form if user is already logged in (and redirection hasn't happened yet)
-    if (user) {
-        return <div className="flex min-h-screen items-center justify-center">Redirecting...</div>;
-    }
-
+  // Don't render login form if user is already logged in (and redirection hasn't happened yet)
+  if (user) {
+    return <div className="flex min-h-screen items-center justify-center">Redirecting...</div>;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -157,16 +152,16 @@ export default function LoginPage() {
               </Button>
             </form>
           </Form>
-           <div className="mt-4 text-center text-sm">
-             Belum punya akun?{' '}
-             <Link href="/register" className="underline text-accent">
-               Daftar di sini
-             </Link>
-              {' | '}
-             <Link href="/admin/login" className="underline text-accent">
-               Login Admin
-             </Link>
-           </div>
+          <div className="mt-4 text-center text-sm">
+            Belum punya akun?{' '}
+            <Link href="/register" className="underline text-accent">
+              Daftar di sini
+            </Link>
+            {' | '}
+            <Link href="/admin/login" className="underline text-accent">
+              Login Admin
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>
