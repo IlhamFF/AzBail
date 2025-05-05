@@ -218,9 +218,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                      <SidebarMenuSub>
                        {item.subItems.map((subItem, subIndex) => (
                          <SidebarMenuSubItem key={subIndex}>
-                           <Link href={subItem.path} passHref legacyBehavior>
+                           <Link href={subItem.path} passHref>
                              <SidebarMenuSubButton asChild isActive={isItemActive(subItem.path)}>
-                               <a>{subItem.label}</a>
+                               <span>{subItem.label}</span>
                              </SidebarMenuSubButton>
                            </Link>
                          </SidebarMenuSubItem>
@@ -229,12 +229,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </SidebarGroup>
 
                 ) : (
-                  <Link href={item.path} passHref legacyBehavior>
+                  <Link href={item.path} passHref>
                     <SidebarMenuButton asChild tooltip={item.label} isActive={isItemActive(item.path)}>
-                      <a>
+                      <span>
                         <item.icon />
                         <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-                      </a>
+                      </span>
                     </SidebarMenuButton>
                   </Link>
                 )}
@@ -246,12 +246,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarFooter>
           <SidebarMenu>
              <SidebarMenuItem>
-                <Link href="/settings" passHref legacyBehavior>
+                <Link href="/settings" passHref>
                   <SidebarMenuButton asChild tooltip="Pengaturan" isActive={isItemActive('/settings')}>
-                    <a>
+                    <span>
                       <Settings />
                       <span className="group-data-[collapsible=icon]:hidden">Pengaturan</span>
-                    </a>
+                    </span>
                   </SidebarMenuButton>
                 </Link>
              </SidebarMenuItem>

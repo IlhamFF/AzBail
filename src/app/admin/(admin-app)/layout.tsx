@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation'; // Import useRouter
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Define menu items specific to Admin
 interface MenuItem {
@@ -112,12 +113,12 @@ export default function AdminAppLayout({ children }: { children: React.ReactNode
           <SidebarMenu>
             {adminMenuItems.map((item, index) => (
               <SidebarMenuItem key={index}>
-                <Link href={item.path} passHref legacyBehavior>
+                <Link href={item.path} passHref>
                   <SidebarMenuButton asChild tooltip={item.label} isActive={isItemActive(item.path)}>
-                    <a>
+                    <span>
                       <item.icon />
                       <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-                    </a>
+                    </span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>
@@ -128,12 +129,12 @@ export default function AdminAppLayout({ children }: { children: React.ReactNode
         <SidebarFooter>
           <SidebarMenu>
              <SidebarMenuItem>
-                <Link href="/settings" passHref legacyBehavior>
+                <Link href="/settings" passHref>
                   <SidebarMenuButton asChild tooltip="Pengaturan" isActive={isItemActive('/settings')}>
-                    <a>
+                    <span>
                       <Settings />
                       <span className="group-data-[collapsible=icon]:hidden">Pengaturan</span>
-                    </a>
+                    </span>
                   </SidebarMenuButton>
                 </Link>
              </SidebarMenuItem>

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Progress } from '@/components/ui/progress';
+import { Label } from '@/components/ui/label'; // Import Label component
 
 // Placeholder data - replace with actual data fetching based on logged-in student
 const attendanceRecords = [

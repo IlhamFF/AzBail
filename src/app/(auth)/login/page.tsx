@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';  // Import useEffect
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
@@ -28,15 +28,50 @@ const formSchema = z.object({
   password: z.string().min(6, { message: 'Password minimal 6 karakter.' }),
 });
 
+const LoadingPlaceholder = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <Card className="w-full max-w-md shadow-lg">
+      <CardHeader>
+        <CardTitle className="text-2xl font-bold text-center">EduPortal Login</CardTitle>
+        <CardDescription className="text-center">
+          Loading...
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <FormLabel>Email</FormLabel>
+            <Input placeholder="contoh@email.com" disabled />
+          </div>
+          <div className="space-y-2">
+            <FormLabel>Password</FormLabel>
+            <Input type="password" placeholder="******" disabled />
+          </div>
+          <Button className="w-full" disabled>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading...
+          </Button>
+        </div>
+        <div className="mt-4 text-center text-sm">
+          Loading links...
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+);
+
+
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth(); // Renamed loading to authLoading
+  const [isInitialRender, setIsInitialRender] = useState(true); // State to track initial render
+
 
   // Redirect if already logged in
   useEffect(() => {
-    if (!loading && user) {
+    if (!authLoading && user) {
       const userRole = user.user_metadata?.role;
       if (userRole === 'Admin') {
         router.push('/admin/dashboard');
@@ -44,7 +79,11 @@ export default function LoginPage() {
         router.push('/dashboard');
       }
     }
-  }, [user, loading, router]);
+    // Set initial render to false after first effect run
+    if (!authLoading) {
+      setIsInitialRender(false);
+    }
+  }, [user, authLoading, router]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -98,15 +137,11 @@ export default function LoginPage() {
     }
   }
 
-  // Show loading state while checking auth status
-  if (loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
-  }
+   // Render loading placeholder during initial check and redirection to prevent hydration mismatch
+   if (isInitialRender || authLoading || user) {
+     return <LoadingPlaceholder />;
+   }
 
-  // Don't render login form if user is already logged in (and redirection hasn't happened yet)
-  if (user) {
-    return <div className="flex min-h-screen items-center justify-center">Redirecting...</div>;
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
