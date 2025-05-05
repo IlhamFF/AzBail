@@ -59,7 +59,7 @@ export default function RegisterPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      console.log("Registration attempt:", values.email); // Add this line
+      console.log("Registration attempt:", values.email);
 
       // 1. Sign up the user with Supabase Auth using browser client
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -67,7 +67,6 @@ export default function RegisterPage() {
         password: values.password,
         options: {
           // Store role and full name in user_metadata
-          // Note: is_verified will be handled by admin later
           data: {
             role: values.role,
             full_name: values.fullName,
@@ -77,42 +76,37 @@ export default function RegisterPage() {
       });
 
       if (signUpError) {
-        console.error("Supabase sign-up error:", signUpError.message); // Add this line
-        // Handle specific errors like email already exists
+        console.error("Supabase sign-up error:", signUpError.message);
         if (signUpError.message.includes('unique constraint') || signUpError.message.includes('already registered')) {
            throw new Error('Email sudah terdaftar. Silakan gunakan email lain atau login.');
         }
         throw signUpError;
       }
 
-      console.log("Sign-up success:", signUpData); // Add this line
+      console.log("Sign-up success:", signUpData);
 
       if (!signUpData.user) {
         throw new Error('Gagal membuat pengguna. Silakan coba lagi.');
       }
 
-      // 2. Optionally, insert into user_details immediately
-      // Note: Ensure RLS allows authenticated users to insert into their own details record.
-      // Alternatively, handle this via a Supabase Function trigger on auth.users insert.
+      // 2. Upsert into user_details table
       const { error: detailError } = await supabase
         .from('user_details')
-        .insert({
+        .upsert({
           user_id: signUpData.user.id,
           full_name: values.fullName,
-          email: values.email, // Tambahkan email
-          role: values.role, // Tambahkan role
-          // Add other fields like phone, address etc. if collected during registration
-        });
+          email: values.email,
+          role: values.role,
+          // Assuming RLS allows the user to insert/update their own details
+        }, { onConflict: 'user_id' }); // Important: specify the column for conflict resolution
 
       if (detailError) {
-        // Log error but proceed with signup message, as auth user is created.
-        console.error('Error inserting user details:', detailError);
+        console.error('Error upserting user details:', detailError);
         toast({
           variant: 'destructive',
           title: 'Registrasi Berhasil, tetapi gagal menyimpan detail profil.',
           description: detailError.message,
         });
-        // Optionally inform the user or trigger an admin notification
       }
 
 
@@ -137,107 +131,106 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">Daftar Akun EduPortal</CardTitle>
-          <CardDescription className="text-center">
-            Lengkapi formulir di bawah ini.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-               <FormField
-                control={form.control}
-                name="fullName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nama Lengkap</FormLabel>
+    // Apply margin to Card for centering and spacing
+    <Card className="w-full max-w-md shadow-lg mx-auto mt-10 mb-10"> {/* Use mx-auto for horizontal centering, mt/mb for vertical spacing */}
+      <CardHeader>
+        <CardTitle className="text-2xl font-bold text-center">Daftar Akun EduPortal</CardTitle>
+        <CardDescription className="text-center">
+          Lengkapi formulir di bawah ini.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="fullName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nama Lengkap</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Nama Lengkap Anda" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="contoh@email.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="******" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Konfirmasi Password</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="******" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="role"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Daftar Sebagai</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <Input placeholder="Nama Lengkap Anda" {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih peran Anda" />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input placeholder="contoh@email.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="******" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Konfirmasi Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="******" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Daftar Sebagai</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih peran Anda" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {roles.map((role) => (
-                          <SelectItem key={role} value={role}>
-                            {role}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isLoading ? 'Memproses...' : 'Daftar'}
-              </Button>
-            </form>
-          </Form>
-          <div className="mt-4 text-center text-sm">
-             Sudah punya akun?{' '}
-             <Link href="/login" className="underline text-accent">
-               Login di sini
-             </Link>
-           </div>
-        </CardContent>
-      </Card>
-    </div>
+                    <SelectContent>
+                      {roles.map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {role}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading ? 'Memproses...' : 'Daftar'}
+            </Button>
+          </form>
+        </Form>
+        <div className="mt-4 text-center text-sm">
+           Sudah punya akun?{' '}
+           <Link href="/login" className="underline text-accent">
+             Login di sini
+           </Link>
+         </div>
+      </CardContent>
+    </Card>
   );
 }

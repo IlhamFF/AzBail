@@ -1,7 +1,5 @@
 'use client';
 
-// src/app/(auth)/login/page.tsx
-
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,10 +28,10 @@ const formSchema = z.object({
   password: z.string().min(6, { message: 'Password minimal 6 karakter.' }),
 });
 
-// Loading Placeholder Component - Removed useFormField hook usage
+// Loading Placeholder Component
 const LoadingPlaceholder = () => (
-  <div className="flex min-h-screen items-center justify-center bg-background p-4">
-    <Card className="w-full max-w-md shadow-lg">
+  <div className="flex min-h-screen items-center justify-center">
+     <Card className="w-full max-w-md shadow-lg">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-center">EduPortal Login</CardTitle>
         <CardDescription className="text-center">
@@ -43,13 +41,11 @@ const LoadingPlaceholder = () => (
       <CardContent>
         <div className="space-y-6">
           <div className="space-y-2">
-            {/* Use standard label or div instead of FormLabel */}
-            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Email</label>
+            <Label>Email</Label>
             <Input placeholder="contoh@email.com" disabled />
           </div>
           <div className="space-y-2">
-             {/* Use standard label or div instead of FormLabel */}
-            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Password</label>
+            <Label>Password</Label>
             <Input type="password" placeholder="******" disabled />
           </div>
           <Button className="w-full" disabled>
@@ -64,7 +60,6 @@ const LoadingPlaceholder = () => (
     </Card>
   </div>
 );
-
 
 export default function LoginPage() {
   const router = useRouter();
@@ -95,18 +90,20 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-        console.log("Login attempt:", values.email); // Add this line
+      console.log("Login attempt:", values.email);
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
 
       if (error) {
-          console.error("Supabase sign-in error:", error.message); // Add this line
+        console.error("Supabase sign-in error:", error.message);
         throw error;
       }
 
-        console.log("Login success:", data); // Add this line
+      console.log("Login success:", data);
+
       const userRole = data.user?.user_metadata?.role;
 
       if (userRole === 'Admin') {
@@ -134,67 +131,71 @@ export default function LoginPage() {
     }
   }
 
-  // Render loading placeholder while checking auth status or if user exists (before redirect)
-  if (loading || user) {
+  // Show loading state while checking auth status
+  if (loading) {
     return <LoadingPlaceholder />;
   }
 
+  // Don't render login form if user is already logged in (and redirection hasn't happened yet)
+  if (user) {
+     return <div className="flex min-h-screen items-center justify-center">Redirecting...</div>;
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">EduPortal Login</CardTitle>
-          <CardDescription className="text-center">
-            Masukkan email dan password Anda.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}> {/* This provides the context for the actual form */}
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel> {/* This FormLabel is fine */}
-                    <FormControl>
-                      <Input placeholder="contoh@email.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel> {/* This FormLabel is fine */}
-                    <FormControl>
-                      <Input type="password" placeholder="******" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isLoading ? 'Memproses...' : 'Login'}
-              </Button>
-            </form>
-          </Form>
-          <div className="mt-4 text-center text-sm">
-            Belum punya akun?{' '}
-            <Link href="/register" className="underline text-accent">
-              Daftar di sini
-            </Link>
-            {' | '}
-            <Link href="/admin/login" className="underline text-accent">
-              Login Admin
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    // Apply margin to Card for centering and spacing
+    <Card className="w-full max-w-md shadow-lg mx-auto mt-20 mb-20"> {/* Use mx-auto for horizontal centering, mt/mb for vertical spacing */}
+      <CardHeader>
+        <CardTitle className="text-2xl font-bold text-center">EduPortal Login</CardTitle>
+        <CardDescription className="text-center">
+          Masukkan email dan password Anda.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="contoh@email.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="******" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading ? 'Memproses...' : 'Login'}
+            </Button>
+          </form>
+        </Form>
+        <div className="mt-4 text-center text-sm">
+          Belum punya akun?{' '}
+          <Link href="/register" className="underline text-accent">
+            Daftar di sini
+          </Link>
+          {' | '}
+          <Link href="/admin/login" className="underline text-accent">
+            Login Admin
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
