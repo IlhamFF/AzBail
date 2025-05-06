@@ -21,6 +21,17 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,6 +49,7 @@ interface Announcement {
   is_pinned: boolean;
   target_role: string | null;
   created_by_name?: string;
+  user_details?: { full_name: string } | null; // Adjusted based on typical Supabase join structure
 }
 
 export default function AnnouncementsPage() {
@@ -63,7 +75,7 @@ export default function AnnouncementsPage() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('announcements')
         .select(`
           id,
@@ -74,18 +86,27 @@ export default function AnnouncementsPage() {
           target_role,
           user_details ( full_name )
         `)
-        // Filter based on target_role only if user is not admin
-        .or(isAdmin ? '' : `target_role.is.null,target_role.eq.${userRole}`)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
+
+      // Filter based on target_role only if user is not admin
+      if (!isAdmin && userRole) {
+        query = query.or(`target_role.is.null,target_role.eq.${userRole}`);
+      } else if (!isAdmin && !userRole) {
+        // If not admin and no role (e.g., public user not logged in), only show public announcements
+        query = query.is('target_role', null);
+      }
+      // If admin, no additional role filtering is applied, fetches all.
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         throw fetchError;
       }
-
+      
       const formattedData = data?.map(ann => ({
         ...ann,
-        created_by_name: (ann.user_details as any)?.full_name || 'Sistem',
+        created_by_name: ann.user_details?.full_name || 'Sistem',
       })) || [];
 
       setAnnouncements(formattedData);
@@ -98,13 +119,11 @@ export default function AnnouncementsPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && (user || !isAdmin)) { // Fetch if logged in OR if not admin (to see public ones)
+    if (!authLoading) { // Fetch if auth loading is complete
       fetchAnnouncements();
-    } else if (!authLoading && !user) {
-      setLoading(false);
-      setError("Anda harus login untuk melihat pengumuman.");
     }
-  }, [user, authLoading, isAdmin, userRole]); // Add isAdmin dependency
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading, isAdmin, userRole]);
 
   const handleDialogOpen = (announcement: Announcement | null = null) => {
     setEditingAnnouncement(announcement);
@@ -145,7 +164,12 @@ export default function AnnouncementsPage() {
 
     startTransition(async () => {
       const action = editingAnnouncement ? updateAnnouncement : createAnnouncement;
-      const result: AnnouncementResult = await action(editingAnnouncement ? editingAnnouncement.id : undefined, formData);
+      // Pass `undefined` as the first argument to `createAnnouncement` if it expects one for `_prevState` but we're calling it directly.
+      // For `updateAnnouncement`, `editingAnnouncement.id` is correctly passed.
+      const result: AnnouncementResult = await action(
+        editingAnnouncement ? editingAnnouncement.id : (action === createAnnouncement ? undefined : editingAnnouncement?.id), // Adjust based on action's signature
+        formData
+      );
 
       if (result.success) {
         toast({
@@ -164,10 +188,10 @@ export default function AnnouncementsPage() {
     });
   };
 
-  const handleDelete = (announcement: Announcement) => {
+  const handleDelete = (announcementId: string, announcementTitle: string) => {
     if (!isAdmin) return;
     startTransition(async () => {
-      const result = await deleteAnnouncement(announcement.id);
+      const result = await deleteAnnouncement(announcementId);
       if (result.success) {
         toast({
           title: 'Hapus Berhasil',
@@ -206,17 +230,22 @@ export default function AnnouncementsPage() {
 
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold">Pengumuman</h1>
         {isAdmin && (
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            if (!open) handleDialogClose(); // Ensure form reset on close
+            else setIsDialogOpen(open);
+          }}>
             <DialogTrigger asChild>
               <Button onClick={() => handleDialogOpen()}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Buat Pengumuman
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]" onInteractOutside={(e) => e.preventDefault()} onCloseAutoFocus={handleDialogClose}>
+            <DialogContent className="sm:max-w-[600px]" onInteractOutside={(e) => {
+                if (isPending) e.preventDefault(); // Prevent closing while pending
+            }} onCloseAutoFocus={handleDialogClose}>
               <DialogHeader>
                 <DialogTitle>{editingAnnouncement ? 'Edit Pengumuman' : 'Buat Pengumuman Baru'}</DialogTitle>
                 <DialogDescription>
@@ -232,6 +261,7 @@ export default function AnnouncementsPage() {
                     onChange={(e) => setFormTitle(e.target.value)}
                     placeholder="Judul pengumuman"
                     required
+                    disabled={isPending}
                   />
                 </div>
                 <div className="space-y-2">
@@ -243,6 +273,7 @@ export default function AnnouncementsPage() {
                     placeholder="Isi pengumuman..."
                     required
                     rows={5}
+                    disabled={isPending}
                   />
                 </div>
                  <div className="space-y-2">
@@ -250,6 +281,7 @@ export default function AnnouncementsPage() {
                    <Select
                      value={formTargetRole || 'Semua'}
                      onValueChange={(value) => setFormTargetRole(value === 'Semua' ? null : value)}
+                     disabled={isPending}
                    >
                      <SelectTrigger id="target_role">
                        <SelectValue placeholder="Pilih target peran" />
@@ -260,7 +292,7 @@ export default function AnnouncementsPage() {
                        <SelectItem value="Siswa">Siswa</SelectItem>
                        <SelectItem value="Tata Usaha">Tata Usaha</SelectItem>
                        <SelectItem value="Kepala Sekolah">Kepala Sekolah</SelectItem>
-                       <SelectItem value="Admin">Admin</SelectItem> {/* Include Admin if needed */}
+                       <SelectItem value="Admin">Admin</SelectItem>
                      </SelectContent>
                    </Select>
                  </div>
@@ -269,6 +301,7 @@ export default function AnnouncementsPage() {
                      id="is_pinned"
                      checked={formIsPinned}
                      onCheckedChange={setFormIsPinned}
+                     disabled={isPending}
                    />
                    <Label htmlFor="is_pinned">Sematkan (Pin) Pengumuman</Label>
                  </div>
@@ -318,7 +351,7 @@ export default function AnnouncementsPage() {
       {!loading && !error && announcements.length === 0 && (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            Tidak ada pengumuman yang relevan untuk Anda saat ini.
+            Tidak ada pengumuman yang tersedia saat ini.
           </CardContent>
         </Card>
       )}
@@ -326,39 +359,36 @@ export default function AnnouncementsPage() {
       {!loading && !error && announcements.length > 0 && (
         <div className="space-y-4">
           {announcements.map((ann) => (
-            <Card key={ann.id} className={`relative ${ann.is_pinned ? 'border-2 border-accent' : ''}`}>
+            <Card key={ann.id} className={`relative shadow-md hover:shadow-lg transition-shadow duration-200 ${ann.is_pinned ? 'border-2 border-accent' : ''}`}>
               <CardHeader>
                 <div className="flex justify-between items-start gap-2">
-                  <CardTitle>{ann.title}</CardTitle>
-                  {ann.is_pinned && <Badge variant="default" className="bg-accent text-accent-foreground">Penting</Badge>}
+                  <CardTitle className="text-lg">{ann.title}</CardTitle>
+                  {ann.is_pinned && <Badge variant="default" className="bg-accent text-accent-foreground shrink-0">Penting</Badge>}
                 </div>
-                <CardDescription>
+                <CardDescription className="text-xs">
                   Diposting oleh {ann.created_by_name} • {' '}
                   {formatDistanceToNow(new Date(ann.created_at), { addSuffix: true, locale: id })}
                 </CardDescription>
                 {ann.target_role && (
-                  <Badge variant="secondary" className="w-fit mt-1">Untuk: {ann.target_role}</Badge>
+                  <Badge variant="secondary" className="w-fit mt-1 text-xs">Untuk: {ann.target_role}</Badge>
                 )}
               </CardHeader>
               <CardContent className="whitespace-pre-wrap text-sm">
                 {ann.content}
               </CardContent>
               {isAdmin && (
-                <CardFooter className="flex justify-end gap-1 absolute bottom-2 right-2">
-                  {/* Pin/Unpin Button */}
+                <CardFooter className="flex justify-end gap-1 pt-2 pb-2 pr-2">
                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePinToggle(ann)} disabled={isPending} title={ann.is_pinned ? 'Lepas Pin' : 'Sematkan'}>
-                      {isPending && editingAnnouncement?.id === ann.id ? <Loader2 className="h-4 w-4 animate-spin"/> : ann.is_pinned ? <PinOff className="h-4 w-4"/> : <Pin className="h-4 w-4"/> }
+                      {isPending && editingAnnouncement?.id === ann.id && editingAnnouncement?.is_pinned !== ann.is_pinned ? <Loader2 className="h-4 w-4 animate-spin"/> : ann.is_pinned ? <PinOff className="h-4 w-4 text-accent"/> : <Pin className="h-4 w-4"/> }
                       <span className="sr-only">{ann.is_pinned ? 'Lepas Pin' : 'Sematkan'}</span>
                    </Button>
-                  {/* Edit Button */}
                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDialogOpen(ann)} disabled={isPending}>
                        <Edit className="h-4 w-4" />
                        <span className="sr-only">Edit</span>
                    </Button>
-                  {/* Delete Button */}
                    <AlertDialog>
                        <AlertDialogTrigger asChild>
-                           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" disabled={isPending}>
+                           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" disabled={isPending || (editingAnnouncement?.id === ann.id && isPending) }>
                                <Trash2 className="h-4 w-4" />
                                <span className="sr-only">Hapus</span>
                            </Button>
@@ -373,11 +403,11 @@ export default function AnnouncementsPage() {
                            <AlertDialogFooter>
                                <AlertDialogCancel disabled={isPending}>Batal</AlertDialogCancel>
                                <AlertDialogAction
-                                   onClick={() => handleDelete(ann)}
+                                   onClick={() => handleDelete(ann.id, ann.title)}
                                    disabled={isPending}
                                    className="bg-destructive hover:bg-destructive/90"
                                >
-                                   {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                   {isPending && editingAnnouncement?.id === ann.id && !editingAnnouncement?.is_pinned ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                    Hapus
                                </AlertDialogAction>
                            </AlertDialogFooter>
