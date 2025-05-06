@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -7,7 +8,9 @@ import { Users, UserCheck, BookOpen, ClipboardList, Activity, School } from 'luc
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/lib/supabase/client'; // Use client for dynamic data fetching
+import { supabase } from '@/lib/supabase/client'; 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 interface AdminStats {
   totalUsers: number | null;
@@ -17,14 +20,10 @@ interface AdminStats {
   recentActivityCount: number | null;
 }
 
-// Example Chart Data
-const userRoleData = [
-  { role: 'Siswa', count: 75 },
-  { role: 'Guru', count: 20 },
-  { role: 'Tata Usaha', count: 5 },
-  { role: 'Kepala Sekolah', count: 1 },
-  { role: 'Admin', count: 1 },
-];
+interface UserRoleCount {
+  role: string;
+  count: number;
+}
 
 const chartConfig = {
   count: {
@@ -42,58 +41,75 @@ export default function AdminDashboardPage() {
     totalSubjects: null,
     recentActivityCount: null,
   });
+  const [userRoleData, setUserRoleData] = useState<UserRoleCount[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      // No need to check role here, layout handles it
+    const fetchAdminData = async () => {
       setLoadingStats(true);
+      setError(null);
       try {
         // Parallel fetch for counts
-        const [usersCount, pendingCount, classesCount, subjectsCount, activityCount] = await Promise.all([
+        const [usersData, pendingData, classesData, subjectsData, activityData, rolesData] = await Promise.all([
           supabase.from('users').select('id', { count: 'exact', head: true }),
           supabase.from('users').select('id', { count: 'exact', head: true }).eq('is_verified', false),
           supabase.from('classes').select('id', { count: 'exact', head: true }),
           supabase.from('subjects').select('id', { count: 'exact', head: true }),
-          supabase.from('audit_logs').select('id', { count: 'exact', head: true }).gt('timestamp', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Example: activity in last 24 hours
+          supabase.from('audit_logs').select('id', { count: 'exact', head: true }).gt('timestamp', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+          supabase.from('users').select('role, id', { count: 'exact' }) // Fetch roles for chart
         ]);
 
         // Basic error handling for fetch
-        if (usersCount.error) throw usersCount.error;
-        if (pendingCount.error) throw pendingCount.error;
-        if (classesCount.error) throw classesCount.error;
-        if (subjectsCount.error) throw subjectsCount.error;
-        if (activityCount.error) throw activityCount.error;
-
+        if (usersData.error) throw new Error(`Users: ${usersData.error.message}`);
+        if (pendingData.error) throw new Error(`Pending Verifications: ${pendingData.error.message}`);
+        if (classesData.error) throw new Error(`Classes: ${classesData.error.message}`);
+        if (subjectsData.error) throw new Error(`Subjects: ${subjectsData.error.message}`);
+        if (activityData.error) throw new Error(`Activity: ${activityData.error.message}`);
+        if (rolesData.error) throw new Error(`User Roles: ${rolesData.error.message}`);
+        
         setStats({
-          totalUsers: usersCount.count,
-          pendingVerifications: pendingCount.count,
-          totalClasses: classesCount.count,
-          totalSubjects: subjectsCount.count,
-          recentActivityCount: activityCount.count,
+          totalUsers: usersData.count,
+          pendingVerifications: pendingData.count,
+          totalClasses: classesData.count,
+          totalSubjects: subjectsData.count,
+          recentActivityCount: activityData.count,
         });
+
+        // Process user roles data
+        if (rolesData.data) {
+          const roleCounts: Record<string, number> = {};
+          rolesData.data.forEach(user => {
+            if (user.role) {
+              roleCounts[user.role] = (roleCounts[user.role] || 0) + 1;
+            }
+          });
+          setUserRoleData(Object.entries(roleCounts).map(([role, count]) => ({ role, count })));
+        }
+
       } catch (error: any) {
         console.error("Error fetching admin stats:", error);
-        // Handle error display if needed (e.g., show a toast)
+        setError(`Gagal memuat statistik admin: ${error.message}`);
       } finally {
         setLoadingStats(false);
       }
     };
 
-     // Fetch stats only if auth is done loading and user exists (layout ensures it's admin)
      if (!authLoading && user) {
-        fetchStats();
+        fetchAdminData();
      }
 
-  }, [user, authLoading]); // Depend on user and authLoading
-
-  // Layout handles loading state, but we can show skeleton for stats
-  // if (authLoading || !user) {
-  //   return <div>Loading dashboard...</div>; // Or a more detailed skeleton
-  // }
+  }, [user, authLoading]); 
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>
@@ -103,7 +119,6 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             {loadingStats ? <Skeleton className="h-8 w-16" /> : <div className="text-2xl font-bold">{stats.totalUsers ?? '-'}</div>}
-            {/* <p className="text-xs text-muted-foreground">+2 dari bulan lalu</p> */}
           </CardContent>
         </Card>
         <Card>
@@ -113,7 +128,6 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
              {loadingStats ? <Skeleton className="h-8 w-12" /> : <div className="text-2xl font-bold">{stats.pendingVerifications ?? '-'}</div>}
-             {/* <p className="text-xs text-muted-foreground">Perlu tindakan segera</p> */}
           </CardContent>
         </Card>
         <Card>
@@ -123,7 +137,6 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             {loadingStats ? <Skeleton className="h-8 w-10" /> : <div className="text-2xl font-bold">{stats.totalClasses ?? '-'}</div>}
-             {/* <p className="text-xs text-muted-foreground">Tahun ajaran ini</p> */}
           </CardContent>
         </Card>
         <Card>
@@ -155,31 +168,34 @@ export default function AdminDashboardPage() {
            </CardHeader>
            <CardContent>
               {loadingStats ? <Skeleton className="h-[250px] w-full" /> : (
+                userRoleData.length > 0 ? (
                 <ChartContainer config={chartConfig} className="h-[250px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={userRoleData} layout="vertical">
+                    <BarChart data={userRoleData} layout="vertical" margin={{ right: 20 }}>
                       <CartesianGrid horizontal={false} />
                       <XAxis type="number" hide/>
-                      <YAxis dataKey="role" type="category" tickLine={false} tickMargin={10} axisLine={false} width={80} />
+                      <YAxis dataKey="role" type="category" tickLine={false} tickMargin={5} axisLine={false} width={100} />
                       <ChartTooltip content={<ChartTooltipContent hideLabel hideIndicator />} cursor={false}/>
                       <Bar dataKey="count" fill="var(--color-count)" radius={5} />
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartContainer>
+                ) : <p className="text-muted-foreground text-center">Data peran tidak tersedia.</p>
               )}
            </CardContent>
          </Card>
-         {/* Add more charts or data visualizations here */}
           <Card>
               <CardHeader>
-                  <CardTitle>Placeholder Chart</CardTitle>
-                  <CardDescription>Example of another chart area.</CardDescription>
+                  <CardTitle>Statistik Tambahan</CardTitle>
+                  <CardDescription>Area untuk chart atau statistik lain.</CardDescription>
               </CardHeader>
               <CardContent className="flex items-center justify-center h-[250px]">
-                  {loadingStats ? <Skeleton className="h-32 w-full" /> : <p className="text-muted-foreground">Chart will be displayed here</p>}
+                  {loadingStats ? <Skeleton className="h-32 w-full" /> : <p className="text-muted-foreground">Chart akan ditampilkan di sini</p>}
               </CardContent>
           </Card>
        </div>
     </div>
   );
 }
+
+    
