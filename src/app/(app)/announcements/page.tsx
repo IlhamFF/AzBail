@@ -50,9 +50,6 @@ interface Announcement {
   is_pinned: boolean;
   target_role: string | null;
   created_by_name?: string; 
-  // Supabase join structure:
-  // user_details: { full_name: string }[] | { full_name: string } | null
-  // To handle cases where user_details might be an array (if not unique join) or object
   user_details?: { full_name: string } | { full_name: string }[] | null;
 }
 
@@ -74,6 +71,62 @@ export default function AnnouncementsPage() {
   const [formTargetRole, setFormTargetRole] = useState<string | null>(null);
   const [formIsPinned, setFormIsPinned] = useState(false);
 
+  /**
+   * Penjelasan Mekanisme Fetch Data untuk Fitur Pengumuman (Contoh untuk Fitur Siswa)
+   * 
+   * Fungsi `fetchAnnouncements` bertanggung jawab untuk mengambil data pengumuman dari database Supabase.
+   * Berikut adalah langkah-langkah utama dalam proses fetching data:
+   * 
+   * 1. Inisialisasi State:
+   *    - `setLoading(true)`: Menandakan bahwa proses pengambilan data sedang berlangsung. Ini biasanya digunakan untuk menampilkan UI loading (misalnya, skeleton).
+   *    - `setError(null)`: Mengatur ulang state error sebelum melakukan fetch baru.
+   * 
+   * 2. Membuat Query ke Supabase:
+   *    - `supabase.from('announcements')`: Memulai query dari tabel 'announcements' di database Supabase.
+   *    - `.select(...)`: Menentukan kolom-kolom yang ingin diambil.
+   *      - `id, title, content, created_at, is_pinned, target_role`: Kolom-kolom dasar dari tabel 'announcements'.
+   *      - `user_details!inner ( full_name )`: Ini adalah contoh join (relasi) dengan tabel 'user_details'.
+   *        - `!inner`: Menandakan inner join. Hanya pengumuman yang memiliki relasi dengan `user_details` (yaitu, `created_by` valid) yang akan diambil.
+   *        - `( full_name )`: Mengambil kolom `full_name` dari tabel `user_details`. Ini berguna untuk menampilkan nama pembuat pengumuman.
+   *    - `.order('is_pinned', { ascending: false })`: Mengurutkan hasil berdasarkan kolom `is_pinned` secara descending (pengumuman yang dipin akan tampil di atas).
+   *    - `.order('created_at', { ascending: false })`: Mengurutkan hasil lebih lanjut berdasarkan kolom `created_at` secara descending (pengumuman terbaru akan tampil di atas).
+   * 
+   * 3. Filter Berdasarkan Peran Pengguna (Role-Based Filtering):
+   *    - Logic ini memastikan bahwa pengguna hanya melihat pengumuman yang relevan dengan perannya.
+   *    - `if (!isAdmin && userRole)`: Jika pengguna bukan admin dan memiliki peran (userRole terdefinisi).
+   *      - `query = query.or(...)`: Menggunakan klausa `or` untuk mengambil pengumuman yang:
+   *        - `target_role.is.null`: Pengumuman yang `target_role`-nya NULL (ditujukan untuk semua peran).
+   *        - `target_role.eq.${userRole}`: Pengumuman yang `target_role`-nya sama dengan peran pengguna saat ini.
+   *    - `else if (!isAdmin && !userRole)`: Jika pengguna bukan admin dan tidak memiliki peran (misalnya, pengguna anonim jika diizinkan).
+   *      - `query = query.is('target_role', null)`: Hanya mengambil pengumuman yang ditujukan untuk semua peran.
+   *    - Jika pengguna adalah admin, tidak ada filter peran tambahan yang diterapkan, sehingga admin dapat melihat semua pengumuman.
+   * 
+   * 4. Eksekusi Query dan Penanganan Hasil:
+   *    - `const { data, error: fetchError } = await query;`: Mengeksekusi query ke Supabase. Hasilnya adalah objek yang berisi `data` (array pengumuman) dan `error` (jika ada kesalahan).
+   *    - `if (fetchError)`: Jika terjadi kesalahan saat fetch, error tersebut akan ditangkap dan ditampilkan.
+   * 
+   * 5. Pemformatan Data (Formatting Data):
+   *    - `const formattedData = data?.map(...) || [];`: Jika data berhasil diambil (`data` tidak null), data tersebut diproses untuk memformat nama pembuat pengumuman.
+   *      - `user_details`: Karena adanya join, `user_details` bisa berupa objek tunggal atau array (tergantung konfigurasi join). Kode ini menangani kedua kasus tersebut untuk mendapatkan `full_name`.
+   *      - Jika `user_details` tidak ada, nama pembuat diatur sebagai "Sistem".
+   * 
+   * 6. Mengatur State Aplikasi:
+   *    - `setAnnouncements(formattedData)`: Menyimpan data pengumuman yang sudah diformat ke dalam state `announcements`, yang kemudian akan dirender oleh komponen.
+   * 
+   * 7. Penanganan Kesalahan (Error Handling):
+   *    - `catch (err: any)`: Menangkap kesalahan umum yang mungkin terjadi selama proses (misalnya, kesalahan jaringan).
+   *    - `setError(...)`: Mengatur state error dengan pesan yang informatif.
+   *    - `toast(...)`: Menampilkan notifikasi error kepada pengguna.
+   * 
+   * 8. Mengatur State Loading Selesai:
+   *    - `finally { setLoading(false); }`: Menandakan bahwa proses pengambilan data telah selesai, baik berhasil maupun gagal.
+   * 
+   * Cara Kerja Umum Fetching Data di Proyek Ini:
+   * - Sebagian besar pengambilan data dari Supabase dilakukan secara client-side menggunakan Supabase JS Client (`@supabase/supabase-js`).
+   * - Fungsi `useEffect` digunakan untuk memicu pengambilan data saat komponen pertama kali dimuat atau ketika dependensi tertentu (seperti `user` atau `userRole`) berubah.
+   * - State (seperti `loading`, `error`, dan data itu sendiri) digunakan untuk mengelola siklus hidup pengambilan data dan merender UI yang sesuai.
+   * - Untuk operasi yang memerlukan otorisasi lebih tinggi atau modifikasi data (Create, Update, Delete), Next.js Server Actions digunakan (`src/actions/...`). Server Actions ini berjalan di server dan dapat menggunakan Supabase Admin Client untuk keamanan yang lebih baik.
+   */
   const fetchAnnouncements = async () => {
     setLoading(true);
     setError(null);
@@ -96,8 +149,10 @@ export default function AnnouncementsPage() {
       if (!isAdmin && userRole) {
         query = query.or(`target_role.is.null,target_role.eq.${userRole}`);
       } else if (!isAdmin && !userRole) {
+        // Hanya tampilkan pengumuman yang target_role nya null jika pengguna tidak login / tidak punya role
         query = query.is('target_role', null);
       }
+      // Admin melihat semua pengumuman, jadi tidak ada filter tambahan untuk admin
       
       const { data, error: fetchError } = await query;
 
@@ -107,9 +162,10 @@ export default function AnnouncementsPage() {
       }
       
       const formattedData = data?.map(ann => {
-        let creatorName = 'Sistem';
+        let creatorName = 'Sistem'; // Default jika user_details tidak ada
         if (ann.user_details) {
-          // Handle if user_details is an array (though with !inner and unique FK it should be an object)
+          // user_details akan menjadi objek karena !inner join pada foreign key yang unik (created_by)
+          // Namun, untuk kehati-hatian, kita tetap bisa mengecek jika itu array.
           creatorName = Array.isArray(ann.user_details) 
                         ? (ann.user_details[0]?.full_name || 'Sistem') 
                         : (ann.user_details.full_name || 'Sistem');
@@ -139,7 +195,7 @@ export default function AnnouncementsPage() {
       fetchAnnouncements();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, isAdmin, userRole]); // Re-fetch if user or role changes
+  }, [user, authLoading, isAdmin, userRole]);
 
   const handleDialogOpen = (announcement: Announcement | null = null) => {
     setEditingAnnouncement(announcement);
@@ -151,7 +207,7 @@ export default function AnnouncementsPage() {
     } else {
       setFormTitle('');
       setFormContent('');
-      setFormTargetRole(null);
+      setFormTargetRole(null); // Default ke null (Semua Peran)
       setFormIsPinned(false);
     }
     setIsDialogOpen(true);
@@ -160,6 +216,7 @@ export default function AnnouncementsPage() {
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setEditingAnnouncement(null);
+    // Reset form fields
     setFormTitle('');
     setFormContent('');
     setFormTargetRole(null);
@@ -173,12 +230,13 @@ export default function AnnouncementsPage() {
     const formData = {
       title: formTitle,
       content: formContent,
-      target_role: formTargetRole,
+      target_role: formTargetRole, // Ini akan null jika 'Semua Peran' dipilih
       is_pinned: formIsPinned,
     };
 
     startTransition(async () => {
       const action = editingAnnouncement ? updateAnnouncement : createAnnouncement;
+      // Untuk createAnnouncement, ID tidak diperlukan, jadi kita kondisikan
       const result: AnnouncementResult = await action(
         editingAnnouncement ? editingAnnouncement.id : (action === createAnnouncement ? undefined : editingAnnouncement?.id), 
         formData
@@ -208,7 +266,7 @@ export default function AnnouncementsPage() {
       if (result.success) {
         toast({
           title: 'Hapus Berhasil',
-          description: result.message,
+          description: `Pengumuman "${announcementTitle}" telah dihapus.`,
         });
         fetchAnnouncements(); 
       } else {
@@ -223,6 +281,8 @@ export default function AnnouncementsPage() {
 
   const handlePinToggle = (announcement: Announcement) => {
      if (!isAdmin) return;
+     // Simpan ID pengumuman yang sedang diproses untuk loader
+     setEditingAnnouncement(announcement); 
      startTransition(async () => {
        const result = await pinAnnouncement(announcement.id, !announcement.is_pinned);
        if (result.success) {
@@ -238,6 +298,7 @@ export default function AnnouncementsPage() {
            description: result.message,
          });
        }
+       setEditingAnnouncement(null); // Reset setelah selesai
      });
    };
 
@@ -257,6 +318,7 @@ export default function AnnouncementsPage() {
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]" onInteractOutside={(e) => {
+                // Mencegah dialog ditutup saat proses submit sedang berjalan
                 if (isPending) e.preventDefault(); 
             }} onCloseAutoFocus={handleDialogClose}>
               <DialogHeader>
@@ -292,7 +354,7 @@ export default function AnnouncementsPage() {
                  <div className="space-y-2">
                    <Label htmlFor="target_role">Target Peran (Opsional)</Label>
                    <Select
-                     value={formTargetRole || 'Semua'}
+                     value={formTargetRole || 'Semua'} // Jika null, tampilkan 'Semua'
                      onValueChange={(value) => setFormTargetRole(value === 'Semua' ? null : value)}
                      disabled={isPending}
                    >
@@ -395,7 +457,7 @@ export default function AnnouncementsPage() {
                       {(isPending && editingAnnouncement?.id === ann.id && editingAnnouncement?.is_pinned !== ann.is_pinned) ? <Loader2 className="h-4 w-4 animate-spin"/> : ann.is_pinned ? <PinOff className="h-4 w-4 text-accent"/> : <Pin className="h-4 w-4"/> }
                       <span className="sr-only">{ann.is_pinned ? 'Lepas Pin' : 'Sematkan'}</span>
                    </Button>
-                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDialogOpen(ann)} disabled={isPending}>
+                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDialogOpen(ann)} disabled={isPending && editingAnnouncement?.id === ann.id}>
                        <Edit className="h-4 w-4" />
                        <span className="sr-only">Edit</span>
                    </Button>
