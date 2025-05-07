@@ -12,11 +12,12 @@ import { AlertTriangle, CalendarOff } from 'lucide-react';
 
 interface StudentScheduleItem {
   id: string;
-  day: string;
+  day: string; // Changed from day_of_week to match formatting
   time: string;
   subject_name: string;
-  class_name: string;
+  class_name: string; // This will be the student's class name
   teacher_name: string;
+  room: string | null;
 }
 
 export default function StudentSchedulePage() {
@@ -37,58 +38,49 @@ export default function StudentSchedulePage() {
       setError(null);
 
       try {
-        // Fetch schedule for the logged-in student
-        // Joins with subjects to get subject_name
-        // Joins with classes to get class_name
-        // Joins with user_details via schedules.teacher_id to get teacher_name
-        // This query assumes you have a 'schedules' table with a 'teacher_id' that references 'users(id)'
-        // and 'class_students' table linking students to classes.
-        // The RLS policies must allow this.
-
-        // First, get the class_id for the student
-        const { data: classStudentData, error: classStudentError } = await supabase
-          .from('class_students')
-          .select('class_id')
+        // Step 1: Get the student's class_id from 'student_schedules' table
+        // Assuming a student might be in student_schedules for one primary class,
+        // or we take the first one found.
+        const { data: studentClassEntry, error: studentClassError } = await supabase
+          .from('student_schedules') // Use student_schedules
+          .select('class_id, classes (name)') // Fetch class_id and class_name directly
           .eq('student_id', user.id)
-          .single();
+          .limit(1)
+          .maybeSingle(); // Use maybeSingle as a student might not have a schedule yet
 
-        if (classStudentError) {
-          if (classStudentError.code === 'PGRST116') { // No rows found
-            setError('Anda belum terdaftar di kelas manapun. Jadwal tidak dapat ditampilkan.');
-            setLoading(false);
-            return;
-          }
-          console.error("Error fetching student's class:", classStudentError);
-          throw new Error(`Gagal mengambil data kelas siswa: ${classStudentError.message}`);
+        if (studentClassError) {
+          console.error("Error fetching student's class info from student_schedules:", studentClassError);
+          throw new Error(`Gagal mengambil data kelas siswa: ${studentClassError.message}`);
         }
 
-        if (!classStudentData?.class_id) {
-          setError('Data kelas siswa tidak ditemukan. Jadwal tidak dapat ditampilkan.');
+        if (!studentClassEntry?.class_id) {
+          setError('Anda belum terdaftar dalam jadwal kelas manapun atau data kelas tidak ditemukan.');
+          setSchedule([]); // Ensure schedule is empty
           setLoading(false);
           return;
         }
 
-        const studentClassId = classStudentData.class_id;
+        const studentClassId = studentClassEntry.class_id;
+        const studentClassName = (studentClassEntry.classes as any)?.name || 'Kelas Tidak Diketahui';
 
+        // Step 2: Fetch the schedule for that class_id from 'class_schedules'
         const { data, error: fetchError } = await supabase
-          .from('schedules')
+          .from('class_schedules') // Use class_schedules table
           .select(`
             id,
             day_of_week,
             start_time,
             end_time,
             room,
-            subjects!inner (subject_name),
-            users!inner (user_details!inner(full_name))
+            subjects (subject_name),
+            users (user_details (full_name))
           `)
-          .eq('class_id', studentClassId) // Filter by the student's class_id
+          .eq('class_id', studentClassId)
           .order('day_of_week', { ascending: true })
           .order('start_time', { ascending: true });
 
-
         if (fetchError) {
-          console.error("Error fetching student schedule:", fetchError);
-          // Provide more specific error message
+          console.error("Error fetching class schedule:", fetchError);
           throw new Error(`Gagal mengambil jadwal pelajaran: ${fetchError.message} (Code: ${fetchError.code})`);
         }
 
@@ -98,19 +90,20 @@ export default function StudentSchedulePage() {
 
         const formattedSchedule = data?.map(item => {
           const teacherDetails = (item.users as any)?.user_details;
-          const teacherName = Array.isArray(teacherDetails) 
-                              ? (teacherDetails[0]?.full_name || 'N/A') 
+          const teacherName = Array.isArray(teacherDetails)
+                              ? (teacherDetails[0]?.full_name || 'N/A')
                               : (teacherDetails?.full_name || 'N/A');
           return {
             id: item.id,
             day: dayMapping[item.day_of_week as number] || `Hari Tidak Valid (${item.day_of_week})`,
-            time: `${item.start_time.substring(0,5)} - ${item.end_time.substring(0,5)}`, // Format HH:MM
+            time: `${item.start_time.substring(0,5)} - ${item.end_time.substring(0,5)}`,
             subject_name: (item.subjects as any)?.subject_name || 'N/A',
-            class_name: 'Kelas Anda', // Student already filtered by class
+            class_name: studentClassName, // Use the fetched student's class name
             teacher_name: teacherName,
+            room: item.room || '-',
           };
         }) || [];
-        
+
         setSchedule(formattedSchedule);
 
       } catch (err: any) {
@@ -127,6 +120,7 @@ export default function StudentSchedulePage() {
         setLoading(false);
         setError("Silakan login untuk melihat jadwal pelajaran.");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 
   if (authLoading || loading) {
@@ -145,6 +139,7 @@ export default function StudentSchedulePage() {
                   <TableHead><Skeleton className="h-5 w-20" /></TableHead>
                   <TableHead><Skeleton className="h-5 w-24" /></TableHead>
                   <TableHead><Skeleton className="h-5 w-32" /></TableHead>
+                  <TableHead><Skeleton className="h-5 w-20" /></TableHead>
                   <TableHead><Skeleton className="h-5 w-32" /></TableHead>
                 </TableRow>
               </TableHeader>
@@ -154,6 +149,7 @@ export default function StudentSchedulePage() {
                     <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                   </TableRow>
                 ))}
@@ -184,7 +180,7 @@ export default function StudentSchedulePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Jadwal Kelas Anda</CardTitle>
+          <CardTitle>Jadwal Kelas Anda: {schedule.length > 0 ? schedule[0].class_name : ''}</CardTitle>
           <CardDescription>Berikut adalah jadwal pelajaran Anda untuk minggu ini.</CardDescription>
           {/* Add Filtering by day if needed */}
         </CardHeader>
@@ -206,7 +202,7 @@ export default function StudentSchedulePage() {
                     <TableCell className="font-medium">{item.day}</TableCell>
                     <TableCell>{item.time}</TableCell>
                     <TableCell>{item.subject_name}</TableCell>
-                    <TableCell>{(item as any).room || '-'}</TableCell> {/* Add room display */}
+                    <TableCell>{item.room}</TableCell>
                     <TableCell>{item.teacher_name}</TableCell>
                   </TableRow>
                 ))
@@ -228,4 +224,3 @@ export default function StudentSchedulePage() {
     </div>
   );
 }
-
