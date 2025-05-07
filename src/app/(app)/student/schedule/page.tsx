@@ -29,7 +29,7 @@ export default function StudentSchedulePage() {
     const fetchSchedule = async () => {
       if (!user?.id) {
         setLoading(false);
-        setError("User not authenticated.");
+        setError("Pengguna tidak terautentikasi.");
         return;
       }
 
@@ -40,43 +40,82 @@ export default function StudentSchedulePage() {
         // Fetch schedule for the logged-in student
         // Joins with subjects to get subject_name
         // Joins with classes to get class_name
-        // Joins with user_details via classes.homeroom_teacher_id to get teacher_name
+        // Joins with user_details via schedules.teacher_id to get teacher_name
+        // This query assumes you have a 'schedules' table with a 'teacher_id' that references 'users(id)'
+        // and 'class_students' table linking students to classes.
+        // The RLS policies must allow this.
+
+        // First, get the class_id for the student
+        const { data: classStudentData, error: classStudentError } = await supabase
+          .from('class_students')
+          .select('class_id')
+          .eq('student_id', user.id)
+          .single();
+
+        if (classStudentError) {
+          if (classStudentError.code === 'PGRST116') { // No rows found
+            setError('Anda belum terdaftar di kelas manapun. Jadwal tidak dapat ditampilkan.');
+            setLoading(false);
+            return;
+          }
+          console.error("Error fetching student's class:", classStudentError);
+          throw new Error(`Gagal mengambil data kelas siswa: ${classStudentError.message}`);
+        }
+
+        if (!classStudentData?.class_id) {
+          setError('Data kelas siswa tidak ditemukan. Jadwal tidak dapat ditampilkan.');
+          setLoading(false);
+          return;
+        }
+
+        const studentClassId = classStudentData.class_id;
+
         const { data, error: fetchError } = await supabase
-          .from('student_schedules')
+          .from('schedules')
           .select(`
             id,
-            day,
-            time,
+            day_of_week,
+            start_time,
+            end_time,
+            room,
             subjects!inner (subject_name),
-            classes!inner (
-              name,
-              user_details!classes_homeroom_teacher_id_fkey (full_name)
-            )
+            users!inner (user_details!inner(full_name))
           `)
-          .eq('student_id', user.id)
-          .order('day', { ascending: true }) // You might want a more sophisticated sort (e.g., custom day order then time)
-          .order('time', { ascending: true });
+          .eq('class_id', studentClassId) // Filter by the student's class_id
+          .order('day_of_week', { ascending: true })
+          .order('start_time', { ascending: true });
 
 
         if (fetchError) {
           console.error("Error fetching student schedule:", fetchError);
-          throw fetchError;
+          // Provide more specific error message
+          throw new Error(`Gagal mengambil jadwal pelajaran: ${fetchError.message} (Code: ${fetchError.code})`);
         }
 
-        const formattedSchedule = data?.map(item => ({
-          id: item.id,
-          day: item.day,
-          time: item.time,
-          subject_name: (item.subjects as any)?.subject_name || 'N/A',
-          class_name: (item.classes as any)?.name || 'N/A',
-          teacher_name: (item.classes as any)?.user_details?.full_name || 'N/A',
-        })) || [];
+        const dayMapping: { [key: number]: string } = {
+          1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu', 0: 'Minggu'
+        };
+
+        const formattedSchedule = data?.map(item => {
+          const teacherDetails = (item.users as any)?.user_details;
+          const teacherName = Array.isArray(teacherDetails) 
+                              ? (teacherDetails[0]?.full_name || 'N/A') 
+                              : (teacherDetails?.full_name || 'N/A');
+          return {
+            id: item.id,
+            day: dayMapping[item.day_of_week as number] || `Hari Tidak Valid (${item.day_of_week})`,
+            time: `${item.start_time.substring(0,5)} - ${item.end_time.substring(0,5)}`, // Format HH:MM
+            subject_name: (item.subjects as any)?.subject_name || 'N/A',
+            class_name: 'Kelas Anda', // Student already filtered by class
+            teacher_name: teacherName,
+          };
+        }) || [];
         
         setSchedule(formattedSchedule);
 
       } catch (err: any) {
         console.error('Error processing schedule:', err);
-        setError('Gagal memuat jadwal pelajaran. Pastikan Anda memiliki koneksi internet dan coba lagi.');
+        setError(err.message || 'Terjadi kesalahan yang tidak diketahui saat memuat jadwal.');
       } finally {
         setLoading(false);
       }
@@ -92,7 +131,7 @@ export default function StudentSchedulePage() {
 
   if (authLoading || loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 md:p-6">
         <h1 className="text-2xl font-semibold">Jadwal Pelajaran</h1>
         <Card>
           <CardHeader>
@@ -128,11 +167,11 @@ export default function StudentSchedulePage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 md:p-6">
         <h1 className="text-2xl font-semibold">Jadwal Pelajaran</h1>
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+          <AlertTitle>Error Memuat Jadwal</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -140,7 +179,7 @@ export default function StudentSchedulePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       <h1 className="text-2xl font-semibold">Jadwal Pelajaran</h1>
 
       <Card>
@@ -156,6 +195,7 @@ export default function StudentSchedulePage() {
                 <TableHead>Hari</TableHead>
                 <TableHead>Waktu</TableHead>
                 <TableHead>Mata Pelajaran</TableHead>
+                <TableHead>Ruang</TableHead>
                 <TableHead>Guru</TableHead>
               </TableRow>
             </TableHeader>
@@ -166,16 +206,17 @@ export default function StudentSchedulePage() {
                     <TableCell className="font-medium">{item.day}</TableCell>
                     <TableCell>{item.time}</TableCell>
                     <TableCell>{item.subject_name}</TableCell>
+                    <TableCell>{(item as any).room || '-'}</TableCell> {/* Add room display */}
                     <TableCell>{item.teacher_name}</TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-10">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
                     <div className="flex flex-col items-center justify-center">
                       <CalendarOff className="h-12 w-12 text-muted-foreground mb-2" />
                       <p>Jadwal pelajaran tidak ditemukan.</p>
-                      <p className="text-xs">Pastikan data jadwal Anda sudah diatur oleh administrator.</p>
+                      <p className="text-xs">Pastikan data jadwal Anda sudah diatur oleh administrator atau Anda terdaftar di kelas.</p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -187,3 +228,4 @@ export default function StudentSchedulePage() {
     </div>
   );
 }
+
