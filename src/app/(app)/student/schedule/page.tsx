@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -12,10 +11,10 @@ import { AlertTriangle, CalendarOff } from 'lucide-react';
 
 interface StudentScheduleItem {
   id: string;
-  day: string; // Changed from day_of_week to match formatting
+  day: string; 
   time: string;
   subject_name: string;
-  class_name: string; // This will be the student's class name
+  class_name: string; 
   teacher_name: string;
   room: string | null;
 }
@@ -38,15 +37,12 @@ export default function StudentSchedulePage() {
       setError(null);
 
       try {
-        // Step 1: Get the student's class_id from 'student_schedules' table
-        // Assuming a student might be in student_schedules for one primary class,
-        // or we take the first one found.
         const { data: studentClassEntry, error: studentClassError } = await supabase
-          .from('student_schedules') // Use student_schedules
-          .select('class_id, classes (name)') // Fetch class_id and class_name directly
+          .from('student_schedules')
+          .select('class_id, classes (name)') 
           .eq('student_id', user.id)
           .limit(1)
-          .maybeSingle(); // Use maybeSingle as a student might not have a schedule yet
+          .maybeSingle(); 
 
         if (studentClassError) {
           console.error("Error fetching student's class info from student_schedules:", studentClassError);
@@ -55,7 +51,7 @@ export default function StudentSchedulePage() {
 
         if (!studentClassEntry?.class_id) {
           setError('Anda belum terdaftar dalam jadwal kelas manapun atau data kelas tidak ditemukan.');
-          setSchedule([]); // Ensure schedule is empty
+          setSchedule([]);
           setLoading(false);
           return;
         }
@@ -63,17 +59,19 @@ export default function StudentSchedulePage() {
         const studentClassId = studentClassEntry.class_id;
         const studentClassName = (studentClassEntry.classes as any)?.name || 'Kelas Tidak Diketahui';
 
-        // Step 2: Fetch the schedule for that class_id from 'class_schedules'
+        // This query requires a foreign key relationship from 'class_schedules' to 'subjects'
+        // and from 'class_schedules' to 'users' (for teacher details).
+        // Ensure these foreign keys exist in your Supabase database schema.
         const { data, error: fetchError } = await supabase
-          .from('class_schedules') // Use class_schedules table
+          .from('class_schedules') 
           .select(`
             id,
             day_of_week,
             start_time,
             end_time,
             room,
-            subjects (subject_name),
-            users (user_details (full_name))
+            subjects (subject_name), 
+            users!class_schedules_teacher_id_fkey (user_details (full_name)) 
           `)
           .eq('class_id', studentClassId)
           .order('day_of_week', { ascending: true })
@@ -81,7 +79,11 @@ export default function StudentSchedulePage() {
 
         if (fetchError) {
           console.error("Error fetching class schedule:", fetchError);
-          throw new Error(`Gagal mengambil jadwal pelajaran: ${fetchError.message} (Code: ${fetchError.code})`);
+          let detailedErrorMessage = `Gagal mengambil jadwal pelajaran: ${fetchError.message}`;
+          if (fetchError.code === 'PGRST200') {
+            detailedErrorMessage += ` (Pesan ini seringkali berarti Supabase tidak dapat menemukan relasi antar tabel yang Anda coba gunakan dalam query. Pastikan ada foreign key yang benar antara 'class_schedules' dan 'subjects', dan antara 'class_schedules' dan 'users'. Cek Supabase dashboard > Table Editor, dan clear schema cache di API settings jika perlu.)`;
+          }
+          throw new Error(detailedErrorMessage);
         }
 
         const dayMapping: { [key: number]: string } = {
@@ -98,7 +100,7 @@ export default function StudentSchedulePage() {
             day: dayMapping[item.day_of_week as number] || `Hari Tidak Valid (${item.day_of_week})`,
             time: `${item.start_time.substring(0,5)} - ${item.end_time.substring(0,5)}`,
             subject_name: (item.subjects as any)?.subject_name || 'N/A',
-            class_name: studentClassName, // Use the fetched student's class name
+            class_name: studentClassName, 
             teacher_name: teacherName,
             room: item.room || '-',
           };
@@ -107,7 +109,7 @@ export default function StudentSchedulePage() {
         setSchedule(formattedSchedule);
 
       } catch (err: any) {
-        console.error('Error processing schedule:', err);
+        console.error('Error processing student schedule:', err);
         setError(err.message || 'Terjadi kesalahan yang tidak diketahui saat memuat jadwal.');
       } finally {
         setLoading(false);
@@ -182,7 +184,6 @@ export default function StudentSchedulePage() {
         <CardHeader>
           <CardTitle>Jadwal Kelas Anda: {schedule.length > 0 ? schedule[0].class_name : ''}</CardTitle>
           <CardDescription>Berikut adalah jadwal pelajaran Anda untuk minggu ini.</CardDescription>
-          {/* Add Filtering by day if needed */}
         </CardHeader>
         <CardContent>
           <Table>
@@ -224,3 +225,4 @@ export default function StudentSchedulePage() {
     </div>
   );
 }
+
