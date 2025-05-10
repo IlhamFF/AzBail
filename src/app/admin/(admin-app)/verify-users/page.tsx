@@ -48,7 +48,21 @@ export default function VerifyUsersPage() {
         .order('created_at', { ascending: true });
 
       if (fetchError) {
-        throw fetchError;
+        console.error('Supabase fetchError object:', JSON.stringify(fetchError, null, 2));
+        let detailedMessage = 'Gagal mengambil data pengguna.';
+        if (fetchError.message) {
+          detailedMessage = `Gagal mengambil data pengguna: ${fetchError.message}`;
+        }
+        if (fetchError.details) {
+          detailedMessage += ` Detail: ${fetchError.details}`;
+        }
+        if (fetchError.hint) {
+          detailedMessage += ` Petunjuk: ${fetchError.hint}`;
+        }
+        if (fetchError.code) {
+            detailedMessage += ` (Kode: ${fetchError.code})`;
+        }
+        throw new Error(detailedMessage);
       }
 
       // Map data to flatten the structure and handle potential null details
@@ -63,12 +77,12 @@ export default function VerifyUsersPage() {
 
       setUsers(formattedData);
     } catch (err: any) {
-      console.error('Error fetching unverified users:', err);
-      setError('Gagal memuat daftar pengguna yang belum diverifikasi.');
+      console.error('Error fetching unverified users:', err.message || err);
+      setError(err.message || 'Gagal memuat daftar pengguna yang belum diverifikasi.');
       toast({
         variant: 'destructive',
         title: 'Gagal Memuat Data',
-        description: err.message || 'Terjadi kesalahan server.',
+        description: err.message || 'Terjadi kesalahan server yang tidak diketahui.',
       });
     } finally {
       setLoading(false);
