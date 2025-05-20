@@ -18,8 +18,9 @@ interface Student {
   user_id: string; // auth.users.id
   nis: string | null;
   full_name: string;
-  class_name: string | null; 
-  is_active: boolean; 
+  class_name: string | null;
+  role: string | null; // From users table
+  is_active: boolean;
 }
 
 export default function StaffManageStudentsPage() {
@@ -33,12 +34,6 @@ export default function StaffManageStudentsPage() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch students by joining user_details, users (auth.users), and classes
-      // We select from 'user_details' and join other tables.
-      // The role 'Siswa' is assumed to be stored in 'user_details.role' or in 'users.raw_user_meta_data->>"role"'
-      // For this example, let's assume 'user_details' has a 'role' column. If not, the query needs adjustment.
-      // Or, more robustly, filter by 'users.role' if that's where it's consistently stored.
-
       const { data, error: fetchError } = await supabase
         .from('user_details')
         .select(`
@@ -47,27 +42,23 @@ export default function StaffManageStudentsPage() {
           nis,
           full_name,
           classes ( name ),
-          users ( role, is_active ) 
+          users ( role, is_active )
         `)
-        .eq('users.role', 'Siswa') // Filter by role from the joined users (auth.users) table
+        .eq('users.role', 'Siswa')
         .order('full_name', { ascending: true });
 
       if (fetchError) {
         console.error("Error fetching students:", fetchError);
-        let detailedMessage = `Gagal mengambil data siswa: ${fetchError.message}`;
+        let detailedMessage = `Gagal mengambil data siswa: ${fetchError.message}.`;
         if (fetchError.code === 'PGRST200' && fetchError.message.includes("relationship")) {
-             detailedMessage += ` (Pastikan ada relasi (foreign key) yang benar antara 'user_details' dan 'users' (via user_details.user_id -> users.id), serta 'user_details' dan 'classes' (via user_details.class_id -> classes.id). Cek juga nama join di select query).`;
+             detailedMessage += ` (Pesan ini mengindikasikan MASALAH PADA SKEMA DATABASE SUPABASE Anda. Pastikan ada foreign key yang benar dari 'user_details.user_id' ke 'auth.users.id' dan dari 'user_details.class_id' ke 'classes.id'. Periksa juga ejaan nama tabel dan kolom dalam query Anda.)`;
         }
         throw new Error(detailedMessage);
       }
 
       const formattedStudents = data?.map(s => {
-        // Safely access nested properties
         const className = (s.classes as { name: string } | null)?.name || 'Belum ada kelas';
-        const userRole = (s.users as { role: string } | null)?.role; // Not strictly needed if filtering by 'Siswa'
-        // is_active might be directly on 'users' or within 'raw_user_meta_data'
-        // Assuming 'is_active' is a direct column on 'users' table for simplicity, or that RLS handles this.
-        // If 'is_active' is in metadata: (s.users as any)?.raw_user_meta_data?.is_active
+        const userRole = (s.users as { role: string } | null)?.role;
         const isActive = (s.users as { is_active: boolean } | null)?.is_active === undefined ? true : (s.users as { is_active: boolean } | null)?.is_active;
 
         return {
@@ -76,10 +67,11 @@ export default function StaffManageStudentsPage() {
           nis: s.nis,
           full_name: s.full_name,
           class_name: className,
+          role: userRole,
           is_active: isActive,
         };
       }) || [];
-      
+
       setStudents(formattedStudents);
 
     } catch (err: any) {
@@ -132,9 +124,9 @@ export default function StaffManageStudentsPage() {
         <div className="flex gap-2 flex-wrap">
            <div className="relative w-full sm:w-auto grow sm:grow-0">
                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-               <Input 
+               <Input
                 type="search"
-                placeholder="Cari siswa (NIS/Nama/Kelas)..." 
+                placeholder="Cari siswa (NIS/Nama/Kelas)..."
                 className="pl-8 w-full sm:w-[250px]"
                 value={searchTerm}
                 onChange={handleSearch}
@@ -170,7 +162,7 @@ export default function StaffManageStudentsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? renderSkeletonRows() : 
+              {loading ? renderSkeletonRows() :
                 filteredStudents.length > 0 ? filteredStudents.map((student) => (
                 <TableRow key={student.id}>
                   <TableCell className="font-medium">{student.nis || '-'}</TableCell>
@@ -210,4 +202,3 @@ export default function StaffManageStudentsPage() {
     </div>
   );
 }
-    
