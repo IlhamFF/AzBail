@@ -18,8 +18,8 @@ interface Student {
   user_id: string; // auth.users.id
   nis: string | null;
   full_name: string;
-  class_name: string | null; // From classes.name
-  is_active: boolean; // From users.is_active (example)
+  class_name: string | null; 
+  is_active: boolean; 
 }
 
 export default function StaffManageStudentsPage() {
@@ -33,7 +33,12 @@ export default function StaffManageStudentsPage() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch students by joining user_details, users, and classes
+      // Fetch students by joining user_details, users (auth.users), and classes
+      // We select from 'user_details' and join other tables.
+      // The role 'Siswa' is assumed to be stored in 'user_details.role' or in 'users.raw_user_meta_data->>"role"'
+      // For this example, let's assume 'user_details' has a 'role' column. If not, the query needs adjustment.
+      // Or, more robustly, filter by 'users.role' if that's where it's consistently stored.
+
       const { data, error: fetchError } = await supabase
         .from('user_details')
         .select(`
@@ -41,30 +46,39 @@ export default function StaffManageStudentsPage() {
           user_id,
           nis,
           full_name,
-          users ( role, is_active ), 
-          classes ( name )
+          classes ( name ),
+          users ( role, is_active ) 
         `)
-        .eq('users.role', 'Siswa') // Filter by role from the joined users table
+        .eq('users.role', 'Siswa') // Filter by role from the joined users (auth.users) table
         .order('full_name', { ascending: true });
 
       if (fetchError) {
         console.error("Error fetching students:", fetchError);
         let detailedMessage = `Gagal mengambil data siswa: ${fetchError.message}`;
         if (fetchError.code === 'PGRST200' && fetchError.message.includes("relationship")) {
-             detailedMessage += ` (Pastikan ada relasi (foreign key) yang benar antara 'user_details' dan 'users', serta 'user_details' dan 'classes'. Cek juga nama join di select query).`;
+             detailedMessage += ` (Pastikan ada relasi (foreign key) yang benar antara 'user_details' dan 'users' (via user_details.user_id -> users.id), serta 'user_details' dan 'classes' (via user_details.class_id -> classes.id). Cek juga nama join di select query).`;
         }
         throw new Error(detailedMessage);
       }
 
-      const formattedStudents = data?.map(s => ({
-        id: s.id,
-        user_id: s.user_id,
-        nis: s.nis,
-        full_name: s.full_name,
-        // Access joined data carefully
-        class_name: (s.classes as any)?.name || 'Belum ada kelas',
-        is_active: (s.users as any)?.is_active === undefined ? true : (s.users as any)?.is_active, // Default to true if undefined
-      })) || [];
+      const formattedStudents = data?.map(s => {
+        // Safely access nested properties
+        const className = (s.classes as { name: string } | null)?.name || 'Belum ada kelas';
+        const userRole = (s.users as { role: string } | null)?.role; // Not strictly needed if filtering by 'Siswa'
+        // is_active might be directly on 'users' or within 'raw_user_meta_data'
+        // Assuming 'is_active' is a direct column on 'users' table for simplicity, or that RLS handles this.
+        // If 'is_active' is in metadata: (s.users as any)?.raw_user_meta_data?.is_active
+        const isActive = (s.users as { is_active: boolean } | null)?.is_active === undefined ? true : (s.users as { is_active: boolean } | null)?.is_active;
+
+        return {
+          id: s.id,
+          user_id: s.user_id,
+          nis: s.nis,
+          full_name: s.full_name,
+          class_name: className,
+          is_active: isActive,
+        };
+      }) || [];
       
       setStudents(formattedStudents);
 
@@ -92,7 +106,8 @@ export default function StaffManageStudentsPage() {
 
   const filteredStudents = students.filter(student =>
     (student.nis && student.nis.toLowerCase().includes(searchTerm)) ||
-    student.full_name.toLowerCase().includes(searchTerm)
+    student.full_name.toLowerCase().includes(searchTerm) ||
+    (student.class_name && student.class_name.toLowerCase().includes(searchTerm))
   );
 
   const renderSkeletonRows = () => (
@@ -118,7 +133,8 @@ export default function StaffManageStudentsPage() {
            <div className="relative w-full sm:w-auto grow sm:grow-0">
                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                <Input 
-                placeholder="Cari siswa (NIS/Nama)..." 
+                type="search"
+                placeholder="Cari siswa (NIS/Nama/Kelas)..." 
                 className="pl-8 w-full sm:w-[250px]"
                 value={searchTerm}
                 onChange={handleSearch}
@@ -139,7 +155,7 @@ export default function StaffManageStudentsPage() {
            {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
+              <AlertTitle>Error Memuat Data</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
@@ -181,18 +197,17 @@ export default function StaffManageStudentsPage() {
                      <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
                         <div className="flex flex-col items-center justify-center">
                           <FileWarning className="h-12 w-12 text-muted-foreground mb-2" />
-                          Tidak ada data siswa.
+                          {searchTerm ? "Tidak ada siswa yang cocok dengan pencarian Anda." : "Tidak ada data siswa."}
                         </div>
                      </TableCell>
                   </TableRow>
                )}
             </TableBody>
           </Table>
+          {/* TODO: Add Pagination if many students */}
         </CardContent>
       </Card>
     </div>
   );
 }
-
-
     
