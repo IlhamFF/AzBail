@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client'; // Changed from @/utils/supabase/client
+import { supabase } from '@/lib/supabase/client'; 
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
@@ -29,12 +29,11 @@ interface StudentDashboardData {
 interface TeacherDashboardData {
   classesTaught: number;
   totalStudents: number;
-  assignmentsToGrade: number; // Changed from assignmentsDue
-  averageStudentPerformance: number | null; // New stat
-  // weeklyAttendance: { name: string; present: number; absent: number }[]; // Placeholder for now
+  assignmentsToGrade: number;
+  averageStudentPerformance: number | null;
 }
 
-// Placeholder for Staff and Principal data types (to be implemented later)
+// Placeholder for Staff and Principal data types
 const staffStats = { studentsManaged: 500, pendingTasks: 10 };
 const principalStats = { teacherPerformance: 8.5, studentEnrollment: 1200, budgetStatus: 'On Track' };
 
@@ -47,7 +46,7 @@ const chartConfig = {
 
 // Separate Dashboard Components using props for data
 const TeacherDashboard: React.FC<{ data: TeacherDashboardData | null; loading: boolean }> = ({ data, loading }) => (
-  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2"> {/* Adjusted grid for 4 cards */}
+  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Kelas Diampu</CardTitle></CardHeader>
       <CardContent><div className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-16" /> : (data?.classesTaught ?? 0)}</div></CardContent>
@@ -64,15 +63,6 @@ const TeacherDashboard: React.FC<{ data: TeacherDashboardData | null; loading: b
       <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Rata-rata Kinerja Siswa</CardTitle></CardHeader>
       <CardContent><div className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-16" /> : (data?.averageStudentPerformance !== null ? `${data?.averageStudentPerformance}%` : '-')}</div></CardContent>
     </Card>
-    {/* Placeholder for weekly attendance chart - can be added later */}
-    {/* <Card className="col-span-1 md:col-span-2 lg:col-span-2">
-       <CardHeader>
-         <CardTitle>Rata-rata Kehadiran Mingguan Kelas</CardTitle>
-       </CardHeader>
-       <CardContent>
-         {loading ? <Skeleton className="h-[200px] w-full" /> : <p className="text-muted-foreground">Grafik kehadiran akan ditampilkan di sini.</p>}
-       </CardContent>
-     </Card> */}
   </div>
 );
 
@@ -126,7 +116,6 @@ const StaffDashboard: React.FC = () => (
       <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Tugas Administrasi Tertunda</CardTitle></CardHeader>
       <CardContent><div className="text-2xl font-bold">{staffStats.pendingTasks}</div></CardContent>
     </Card>
-     {/* Add more relevant cards for Staff */}
   </div>
 );
 
@@ -144,7 +133,6 @@ const PrincipalDashboard: React.FC = () => (
       <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Status Anggaran</CardTitle></CardHeader>
       <CardContent><div className="text-2xl font-bold">{principalStats.budgetStatus}</div></CardContent>
     </Card>
-    {/* Add more relevant charts/data for Principal */}
   </div>
 );
 
@@ -172,10 +160,10 @@ export default function DashboardPage() {
 
       if (userError || !studentDetails) throw userError || new Error("Detail siswa tidak ditemukan.");
 
-      const studentDetailId = studentDetails.id; // This is user_details.id
+      const studentDetailId = studentDetails.id;
       const classId = studentDetails.class_id;
 
-      if (!classId) { // If student is not assigned to a class yet
+      if (!classId) {
          setStudentData({
            assignmentsDue: 0,
            upcomingExams: 0,
@@ -191,36 +179,43 @@ export default function DashboardPage() {
         .select('id', { count: 'exact', head: true })
         .eq('class_id', classId) 
         .gte('deadline', new Date().toISOString());
-      // Add logic to check if student has already submitted for more accuracy
+      
+      if (assignmentsError) console.warn("Warning fetching student assignments:", assignmentsError.message);
 
       const { count: totalAttendanceCount, error: totalAttendanceError } = await supabase
          .from('attendance')
          .select('id', { count: 'exact', head: true })
-         .eq('student_id', studentDetailId); // Use user_details.id for student_id
+         .eq('student_id', studentDetailId);
 
-       const { count: presentAttendanceCount, error: presentAttendanceError } = await supabase
+      if (totalAttendanceError) console.warn("Warning fetching total attendance:", totalAttendanceError.message);
+
+      const { count: presentAttendanceCount, error: presentAttendanceError } = await supabase
          .from('attendance')
          .select('id', { count: 'exact', head: true })
-         .eq('student_id', studentDetailId) // Use user_details.id
+         .eq('student_id', studentDetailId)
          .eq('status', 'Hadir');
+      
+      if (presentAttendanceError) console.warn("Warning fetching present attendance:", presentAttendanceError.message);
 
-       const attendancePercentage = (presentAttendanceCount !== null && totalAttendanceCount !== null && totalAttendanceCount > 0)
+      const attendancePercentage = (presentAttendanceCount !== null && totalAttendanceCount !== null && totalAttendanceCount > 0)
          ? Math.round((presentAttendanceCount / totalAttendanceCount) * 100)
          : 0;
 
-       const { data: gradesData, error: gradesError } = await supabase
+      const { data: gradesData, error: gradesError } = await supabase
          .from('grades')
          .select('score, subjects(subject_name)')
-         .eq('student_id', studentDetailId); // Use user_details.id
+         .eq('student_id', studentDetailId);
+      
+      if (gradesError) console.warn("Warning fetching student grades:", gradesError.message);
 
-       const gradesBySubject = gradesData?.map(g => ({
+      const gradesBySubject = gradesData?.map(g => ({
           name: (g.subjects as any)?.subject_name || 'Unknown Subject',
           score: g.score || 0
-       })) || [];
+      })) || [];
 
       setStudentData({
         assignmentsDue: assignmentsDueCount || 0,
-        upcomingExams: 0, // Placeholder - implement fetching for exams
+        upcomingExams: 0, 
         attendancePercentage: attendancePercentage,
         gradesBySubject: gradesBySubject,
       });
@@ -237,7 +232,6 @@ export default function DashboardPage() {
     setDashboardLoading(true);
     setDashboardError(null);
     try {
-      // Get teacher's user_details id
       const { data: teacherDetails, error: teacherDetailsError } = await supabase
         .from('user_details')
         .select('id')
@@ -245,16 +239,14 @@ export default function DashboardPage() {
         .single();
 
       if (teacherDetailsError || !teacherDetails) throw teacherDetailsError || new Error("Detail guru tidak ditemukan.");
-      const teacherDetailId = teacherDetails.id; // This is user_details.id which might be used in assignments.teacher_id
-
-      // 1. Classes Taught (Homeroom teacher)
+      
       const { count: classesTaughtCount, error: classesError } = await supabase
         .from('classes')
         .select('id', { count: 'exact', head: true })
-        .eq('homeroom_teacher_id', currentUserId); // Assuming homeroom_teacher_id is auth.users.id
+        .eq('homeroom_teacher_id', currentUserId);
 
-      // 2. Total Students
-      // Fetch all classes where the teacher is a homeroom teacher
+      if (classesError) console.warn("Warning fetching classes taught:", classesError.message);
+
       const { data: taughtClasses, error: taughtClassesError } = await supabase
         .from('classes')
         .select('id')
@@ -265,50 +257,33 @@ export default function DashboardPage() {
       let totalStudentsCount = 0;
       if (taughtClasses && taughtClasses.length > 0) {
         const classIds = taughtClasses.map(c => c.id);
-        // Count students from user_details table who are in these classes
         const { count: studentsInClassesCount, error: studentsError } = await supabase
           .from('user_details')
           .select('id', { count: 'exact', head: true })
           .in('class_id', classIds)
-          .eq('role', 'Siswa'); // Ensure we are counting students
-        if (studentsError) throw studentsError;
+          .eq('role', 'Siswa'); 
+        if (studentsError) console.warn("Warning fetching students in classes:", studentsError.message);
         totalStudentsCount = studentsInClassesCount || 0;
       }
 
-      // 3. Assignments to Grade
-      // Count submissions for assignments created by this teacher where submission status needs grading
       const { count: assignmentsToGradeCount, error: assignmentsToGradeError } = await supabase
         .from('submissions')
         .select('id', { count: 'exact', head: true })
-        .eq('assignments.teacher_id', currentUserId) // Assuming assignments.teacher_id is auth.users.id
-        // Add a condition for submissions that need grading, e.g., .is('grade', null) or similar
-        // This part needs more specific logic based on how "needs grading" is defined
-        // For now, let's count all submissions for the teacher's assignments
-      
+        // This requires a join or a way to filter submissions based on assignments.teacher_id
+        // For simplicity, this is a placeholder. A more accurate query would be needed.
+        // e.g., .eq('assignments.teacher_id', currentUserId) if join is possible,
+        // or fetch assignments by teacher, then submissions for those assignments.
+        // This count will likely be inaccurate without proper filtering.
+
       if (assignmentsToGradeError) console.warn("Warning fetching assignments to grade:", assignmentsToGradeError.message);
 
-
-      // 4. Average Student Performance (Placeholder logic)
-      // This is complex. A simplified version: fetch all grades for students in the teacher's classes
-      // For now, we'll set a placeholder or null.
-      let averagePerformance: number | null = null;
-      // Example of fetching grades (needs refinement for actual performance calculation)
-      // const { data: teacherStudentsGrades, error: gradesError } = await supabase
-      //   .from('grades')
-      //   .select('score')
-      //   .in('student_id', (await supabase.from('user_details').select('id').in('class_id', taughtClasses.map(c=>c.id))).data.map(ud => ud.id) ) // very nested
-
-      // if(!gradesError && teacherStudentsGrades && teacherStudentsGrades.length > 0){
-      //    const totalScore = teacherStudentsGrades.reduce((sum, grade) => sum + (grade.score || 0), 0);
-      //    averagePerformance = Math.round(totalScore / teacherStudentsGrades.length);
-      // }
-
+      let averagePerformance: number | null = null; // Placeholder
 
       setTeacherData({
         classesTaught: classesTaughtCount || 0,
         totalStudents: totalStudentsCount,
-        assignmentsToGrade: assignmentsToGradeCount || 0, // Placeholder
-        averageStudentPerformance: averagePerformance, // Placeholder
+        assignmentsToGrade: assignmentsToGradeCount || 0, 
+        averageStudentPerformance: averagePerformance,
       });
 
     } catch (err: any) {
@@ -329,22 +304,21 @@ export default function DashboardPage() {
   useEffect(() => {
     const role = getUserRole(user);
     if (!authLoading && user && role !== 'Admin') {
-      if (role === 'Siswa' && !studentData) {
+      setDashboardLoading(true); // Set loading true before fetching
+      if (role === 'Siswa') {
         fetchStudentData(user.id);
-      } else if (role === 'Guru' && !teacherData) {
+      } else if (role === 'Guru') {
         fetchTeacherData(user.id);
-      } else if (!user) {
-        setStudentData(null);
-        setTeacherData(null);
-        setDashboardLoading(false);
       } else {
-        setDashboardLoading(false);
+        setDashboardLoading(false); // No specific data to fetch for other roles yet
       }
     } else if (!authLoading && !user) {
-      // If user is not logged in and auth is not loading, ensure dashboard loading is false
+      setStudentData(null);
+      setTeacherData(null);
       setDashboardLoading(false);
     }
-  }, [user, authLoading, studentData, teacherData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
 
   if (authLoading || (user && getUserRole(user) === 'Admin')) {
     return (
@@ -374,12 +348,11 @@ export default function DashboardPage() {
   const role = getUserRole(user);
 
   const renderDashboardContent = () => {
-    if (dashboardLoading && role) { // Show skeleton only if dashboard is loading for a known role
+    if (dashboardLoading && role && (role === 'Siswa' || role === 'Guru')) { 
         return (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {[...Array(role === 'Siswa' ? 3 : 2)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+                {[...Array(role === 'Siswa' ? 3 : 4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
                 {role === 'Siswa' && <Skeleton className="h-64 md:col-span-2 lg:col-span-3" />}
-                 {role === 'Guru' && <Skeleton className="h-32 md:col-span-2" />}
             </div>
         );
     }
@@ -399,9 +372,9 @@ export default function DashboardPage() {
       case 'Siswa':
         return <StudentDashboard data={studentData} loading={dashboardLoading} />;
       case 'Tata Usaha':
-        return <StaffDashboard />;
+        return <StaffDashboard />; // Still uses placeholder data
       case 'Kepala Sekolah':
-        return <PrincipalDashboard />;
+        return <PrincipalDashboard />; // Still uses placeholder data
       default:
         return <Card><CardContent className="p-6">Peran tidak dikenali atau tidak memiliki dashboard.</CardContent></Card>;
     }

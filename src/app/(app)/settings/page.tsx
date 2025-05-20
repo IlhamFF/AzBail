@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -8,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 export default function SettingsPage() {
   const { user, loading, signOut } = useAuth();
@@ -15,13 +17,25 @@ export default function SettingsPage() {
   const router = useRouter();
 
    // State for theme (example, needs implementation)
-   const [darkMode, setDarkMode] = React.useState(false); // Replace with actual theme logic
+   const [darkMode, setDarkMode] = React.useState(false); 
+   const [isClient, setIsClient] = React.useState(false);
+
+   React.useEffect(() => {
+    setIsClient(true);
+    // Optionally, load saved theme preference from localStorage
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      setDarkMode(true);
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
 
    const handleThemeChange = (checked: boolean) => {
      setDarkMode(checked);
-     // Implement theme switching logic here (e.g., using context, localStorage, CSS variables)
+     document.documentElement.classList.toggle('dark', checked);
+     localStorage.setItem('theme', checked ? 'dark' : 'light'); // Save theme preference
      toast({ title: `Mode ${checked ? 'Gelap' : 'Terang'} Diaktifkan`});
-     document.documentElement.classList.toggle('dark', checked); // Basic example
    };
 
    const handleSignOut = async () => {
@@ -34,17 +48,32 @@ export default function SettingsPage() {
       }
    }
 
-  if (loading) {
-    return <div>Loading settings...</div>; // Or use Skeleton
+  if (loading || !isClient) { // Wait for client-side mount for theme
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <Skeleton className="h-8 w-1/2 mb-6" /> {/* Title Skeleton */}
+        {[...Array(3)].map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-6 w-1/3 mb-1" />
+              <Skeleton className="h-4 w-2/3" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-10 w-1/4" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
   }
 
   if (!user) {
-    // Should be redirected by layout
+    // Should be redirected by layout or AuthContext
     return null;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       <h1 className="text-2xl font-semibold">Pengaturan Akun</h1>
 
       <Card>
@@ -76,7 +105,6 @@ export default function SettingsPage() {
           <CardDescription>Kelola pengaturan keamanan akun Anda.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-           {/* Add password change form/button here */}
             <div>
                <Button variant="outline" onClick={() => toast({ title: 'Fitur Ganti Password (Belum Tersedia)'})}>
                   Ganti Password
@@ -85,7 +113,6 @@ export default function SettingsPage() {
                   Ubah password akun Anda secara berkala.
                </p>
             </div>
-            {/* Add other security settings like 2FA if applicable */}
         </CardContent>
       </Card>
 
@@ -104,3 +131,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    
