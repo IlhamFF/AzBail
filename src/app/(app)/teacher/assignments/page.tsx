@@ -98,42 +98,45 @@ export default function TeacherAssignmentsPage() {
   };
 
   const fetchFormData = async () => {
-     if (!user?.id) return;
-    setLoadingFormData(true);
-    try {
-      const { data: scheduleData, error: scheduleError } = await supabase
-        .from('class_schedules')
-        .select('subjects (id, subject_name), classes (id, name)')
-        .eq('teacher_id', user.id);
-
-      if (scheduleError) throw scheduleError;
-
-      const uniqueSubjects: Subject[] = [];
-      const subjectMap = new Map<string, Subject>();
-      const uniqueClasses: Class[] = [];
-      const classMap = new Map<string, Class>();
-
-      scheduleData?.forEach(item => {
-        const subject = item.subjects as Subject;
-        const classItem = item.classes as Class;
-        if (subject && !subjectMap.has(subject.id)) {
-          subjectMap.set(subject.id, subject);
-          uniqueSubjects.push(subject);
-        }
-        if (classItem && !classMap.has(classItem.id)) {
-            classMap.set(classItem.id, classItem);
-            uniqueClasses.push(classItem);
-        }
-      });
-      setTeacherSubjects(uniqueSubjects.sort((a, b) => a.subject_name.localeCompare(b.subject_name)));
-      setTeacherClasses(uniqueClasses.sort((a,b) => a.name.localeCompare(b.name)));
-    } catch (err: any) {
-      setError(err.message || 'Gagal memuat data untuk form tugas.');
-      toast({ variant: 'destructive', title: 'Error Data Form', description: err.message });
-    } finally {
-      setLoadingFormData(false);
-    }
-  };
+    if (!user?.id) return;
+   setLoadingFormData(true);
+   setError(null); // Reset error state at the start of fetch
+   try {
+     // Fetch all subjects
+     const { data: subjectsData, error: subjectsError } = await supabase
+       .from('subjects')
+       .select('id, subject_name')
+       .order('subject_name', { ascending: true });
+ 
+     if (subjectsError) {
+         console.error("Supabase fetch subjects error:", subjectsError); // Log detailed error
+         throw subjectsError;
+     }
+ 
+ 
+     // Fetch all classes
+     const { data: classesData, error: classesError } = await supabase
+       .from('classes')
+       .select('id, name')
+       .order('name', { ascending: true });
+ 
+     if (classesError) {
+         console.error("Supabase fetch classes error:", classesError); // Log detailed error
+         throw classesError;
+     }
+ 
+     setTeacherSubjects(subjectsData || []);
+     setTeacherClasses(classesData || []);
+ 
+   } catch (err: any) {
+     console.error("Error fetching form data:", err);
+     setError(err.message || 'Gagal memuat data untuk form tugas.');
+     toast({ variant: 'destructive', title: 'Error Data Form', description: err.message });
+   } finally {
+     setLoadingFormData(false);
+   }
+ };
+ 
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -193,11 +196,22 @@ export default function TeacherAssignmentsPage() {
       setTitle(''); setSubjectId(''); setClassId(''); setDeadline(undefined); setInstructions(''); setFile(null);
       fetchAssignments(); // Refresh list
     } catch (err: any) {
-      console.error("Error creating assignment:", err);
-      toast({ variant: 'destructive', title: 'Gagal Membuat Tugas', description: err.message });
+      console.error("Error creating assignment:", err); // Tetap log objek error lengkap
+      let errorMessage = 'Gagal membuat tugas.';
+      if (err && err.message) { // Coba akses properti .message
+          errorMessage = `Gagal membuat tugas: ${err.message}`;
+      } else if (typeof err === 'string') { // Jika error adalah string
+          errorMessage = `Gagal membuat tugas: ${err}`;
+      } else {
+          errorMessage = 'Gagal membuat tugas: Terjadi kesalahan yang tidak diketahui.';
+      }
+
+      toast({ variant: 'destructive', title: 'Gagal Membuat Tugas', description: errorMessage });
+      // Optional: setError(errorMessage); // Set error state jika ingin ditampilkan di UI
     } finally {
       setIsCreating(false);
     }
+
   };
 
   return (

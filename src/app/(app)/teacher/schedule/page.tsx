@@ -39,7 +39,7 @@ export default function TeacherSchedulePage() {
 
       try {
         const { data, error: fetchError } = await supabase
-          .from('class_schedules')
+          .from('teacher_schedules')
           .select(`
             id,
             day_of_week,

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useTransition } from 'react';
@@ -7,10 +8,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, Trash2, Edit, AlertTriangle, Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Loader2, Trash2, Edit, AlertTriangle, Search, ChevronLeft, ChevronRight, Filter, PlusCircle, UserPlus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,32 +35,58 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { deleteUser } from '@/actions/admin/deleteUser'; // Import the server action
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Import Alert component
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { deleteUser } from '@/actions/admin/deleteUser';
+import { createUserByAdmin, type CreateUserFormData, type CreateUserResult } from '@/actions/admin/createUserByAdmin';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface ManagedUser {
-  id: string; // User UUID from users table
+  id: string;
   email: string | null;
   role: string | null;
   created_at: string;
-  full_name: string | null; // From user_details
+  full_name: string | null;
   is_verified: boolean;
 }
 
 const ITEMS_PER_PAGE = 10;
 const ROLES = ['Admin', 'Guru', 'Siswa', 'Tata Usaha', 'Kepala Sekolah'];
 
+const createUserFormSchema = z.object({
+  fullName: z.string().min(3, { message: 'Nama lengkap minimal 3 karakter.' }),
+  email: z.string().email({ message: 'Format email tidak valid.' }),
+  password: z.string().min(6, { message: 'Password minimal 6 karakter.' }),
+  role: z.enum(ROLES as [string, ...string[]], { // Ensure zod enum gets a non-empty array
+    required_error: 'Peran harus dipilih.',
+  }),
+});
+
 export default function ManageUsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isTransitionPending, startTransition] = useTransition();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all'); // 'all', 'verified', 'unverified'
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
+
+  const createUserForm = useForm<CreateUserFormData>({
+    resolver: zodResolver(createUserFormSchema),
+    defaultValues: {
+      fullName: '',
+      email: '',
+      password: '',
+      role: undefined,
+    },
+  });
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -59,7 +96,6 @@ export default function ManageUsersPage() {
     const to = from + ITEMS_PER_PAGE - 1;
 
     try {
-      // IMPORTANT: Ensure RLS policies allow Admins to select from 'users' and 'user_details'.
       let query = supabase
         .from('users')
         .select(`
@@ -73,18 +109,12 @@ export default function ManageUsersPage() {
         .order('created_at', { ascending: false })
         .range(from, to);
 
-      // Apply search
       if (searchTerm) {
-        // Search by name (from user_details) or email
         query = query.or(`email.ilike.%${searchTerm}%,user_details.full_name.ilike.%${searchTerm}%`);
       }
-
-      // Apply role filter
       if (filterRole !== 'all') {
         query = query.eq('role', filterRole);
       }
-
-      // Apply status filter
       if (filterStatus !== 'all') {
         query = query.eq('is_verified', filterStatus === 'verified');
       }
@@ -92,8 +122,14 @@ export default function ManageUsersPage() {
       const { data, error: fetchError, count } = await query;
 
       if (fetchError) {
-        console.error('Supabase fetch users error:', fetchError); // Log the detailed error
-        throw fetchError; // Rethrow the error to be caught by the catch block
+        console.error('Supabase fetch users error:', fetchError);
+        if (fetchError.message.includes("relationship between 'users' and 'user_details'")) {
+          throw new Error(`Gagal memuat daftar pengguna: Supabase tidak dapat menemukan relasi antara 'users' dan 'user_details'. 
+                          Pastikan foreign key dari 'user_details.user_id' ke 'auth.users.id' sudah benar di database Supabase Anda. 
+                          Cek Table Editor di Supabase, pilih tabel 'user_details', kolom 'user_id', dan pastikan Foreign Key merujuk ke 'auth.users' kolom 'id'. 
+                          Setelah itu, coba refresh schema cache di Supabase (Settings -> API).`);
+        }
+        throw fetchError;
       }
 
       const formattedData: ManagedUser[] = data?.map(user => ({
@@ -110,12 +146,11 @@ export default function ManageUsersPage() {
 
     } catch (err: any) {
       console.error('Error fetching users:', err);
-      // Display a more specific error message
-      setError(`Gagal memuat daftar pengguna: ${err.message || 'Terjadi kesalahan server.'}`);
+      setError(err.message || 'Terjadi kesalahan server.');
       toast({
         variant: 'destructive',
-        title: 'Gagal Memuat Data',
-        description: err.message || 'Terjadi kesalahan server.',
+        title: 'Gagal Memuat Data Pengguna',
+        description: err.message,
       });
     } finally {
       setLoading(false);
@@ -124,7 +159,7 @@ export default function ManageUsersPage() {
 
   useEffect(() => {
     fetchUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, searchTerm, filterRole, filterStatus]);
 
   const handleDeleteUser = (userId: string, userName: string | null) => {
@@ -135,13 +170,11 @@ export default function ManageUsersPage() {
           title: 'Pengguna Dihapus',
           description: `Pengguna ${userName || userId} berhasil dihapus.`,
         });
-        // Refetch data for the current page after deletion
-        // Check if it was the last item on the page
-         if (users.length === 1 && currentPage > 1) {
-           setCurrentPage(currentPage - 1);
-         } else {
-           fetchUsers();
-         }
+        if (users.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        } else {
+          fetchUsers();
+        }
       } else {
         toast({
           variant: 'destructive',
@@ -152,21 +185,42 @@ export default function ManageUsersPage() {
     });
   };
 
+  async function onCreateUserSubmit(values: CreateUserFormData) {
+    startTransition(async () => {
+      const result: CreateUserResult = await createUserByAdmin(undefined, values);
+      if (result.success) {
+        toast({
+          title: 'Pengguna Dibuat',
+          description: `Pengguna ${values.fullName} berhasil dibuat.`,
+        });
+        setIsCreateUserDialogOpen(false);
+        createUserForm.reset();
+        fetchUsers();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Gagal Membuat Pengguna',
+          description: result.message,
+        });
+      }
+    });
+  }
+
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
-    setCurrentPage(1); // Reset page on new search
+    setCurrentPage(1);
   };
 
   const handleRoleChange = (value: string) => {
     setFilterRole(value);
-    setCurrentPage(1); // Reset page on filter change
+    setCurrentPage(1);
   };
 
   const handleStatusChange = (value: string) => {
     setFilterStatus(value);
-    setCurrentPage(1); // Reset page on filter change
+    setCurrentPage(1);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -180,29 +234,106 @@ export default function ManageUsersPage() {
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-             <div>
-               <CardTitle>Manajemen Pengguna</CardTitle>
-               <CardDescription>Kelola akun pengguna sistem.</CardDescription>
-             </div>
-             {/* <Button disabled>  TODO: Implement Add User Dialog
-               <PlusCircle className="mr-2 h-4 w-4" /> Tambah Pengguna
-             </Button> */}
+            <div>
+              <CardTitle>Manajemen Pengguna</CardTitle>
+              <CardDescription>Kelola akun pengguna sistem.</CardDescription>
+            </div>
+            <Dialog open={isCreateUserDialogOpen} onOpenChange={setIsCreateUserDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <UserPlus className="mr-2 h-4 w-4" /> Tambah Pengguna Baru
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]" onInteractOutside={(e) => { if (isTransitionPending) e.preventDefault(); }} onCloseAutoFocus={() => createUserForm.reset()}>
+                <DialogHeader>
+                  <DialogTitle>Tambah Pengguna Baru</DialogTitle>
+                  <DialogDescription>
+                    Admin membuat akun baru. Pengguna akan langsung terverifikasi.
+                  </DialogDescription>
+                </DialogHeader>
+                <Form {...createUserForm}>
+                  <form onSubmit={createUserForm.handleSubmit(onCreateUserSubmit)} className="space-y-4 py-4">
+                    <FormField
+                      control={createUserForm.control}
+                      name="fullName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nama Lengkap</FormLabel>
+                          <FormControl><Input placeholder="Nama Lengkap Pengguna" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={createUserForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl><Input type="email" placeholder="email@example.com" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={createUserForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Password</FormLabel>
+                          <FormControl><Input type="password" placeholder="Minimal 6 karakter" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={createUserForm.control}
+                      name="role"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Peran</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Pilih peran pengguna" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {ROLES.map(role => <SelectItem key={role} value={role}>{role}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button type="button" variant="outline" disabled={isTransitionPending}>Batal</Button>
+                      </DialogClose>
+                      <Button type="submit" disabled={isTransitionPending}>
+                        {isTransitionPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Simpan Pengguna
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
           </div>
-          {/* Filtering and Searching */}
           <div className="flex flex-col sm:flex-row gap-2 pt-4">
-             <div className="relative flex-1 md:grow-0">
-                <Search className="absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                   type="search"
-                   placeholder="Cari nama atau email..."
-                   value={searchTerm}
-                   onChange={handleSearchChange}
-                   className="pl-8 w-full md:w-[200px] lg:w-[300px]"
-                 />
-              </div>
-             <Select value={filterRole} onValueChange={handleRoleChange}>
+            <div className="relative flex-1 md:grow-0">
+              <Search className="absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Cari nama atau email..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className="pl-8 w-full md:w-[200px] lg:w-[300px]"
+              />
+            </div>
+            <Select value={filterRole} onValueChange={handleRoleChange}>
               <SelectTrigger className="w-full sm:w-[180px]">
-                 <Filter className="h-4 w-4 mr-2" />
+                <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Filter Peran" />
               </SelectTrigger>
               <SelectContent>
@@ -210,9 +341,9 @@ export default function ManageUsersPage() {
                 {ROLES.map(role => <SelectItem key={role} value={role}>{role}</SelectItem>)}
               </SelectContent>
             </Select>
-             <Select value={filterStatus} onValueChange={handleStatusChange}>
+            <Select value={filterStatus} onValueChange={handleStatusChange}>
               <SelectTrigger className="w-full sm:w-[180px]">
-                 <Filter className="h-4 w-4 mr-2" />
+                <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Filter Status" />
               </SelectTrigger>
               <SelectContent>
@@ -224,17 +355,22 @@ export default function ManageUsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Error Display */}
           {error && (
-             <Alert variant="destructive" className="mb-4">
-               <AlertTriangle className="h-4 w-4" />
-               <AlertTitle>Error</AlertTitle>
-               <AlertDescription>{error}</AlertDescription>
-             </Alert>
+            <Alert variant="destructive" className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error Memuat Data</AlertTitle>
+              <AlertDescription>
+                {error.split('\n').map((line, index) => (
+                  <React.Fragment key={index}>
+                    {line}
+                    <br />
+                  </React.Fragment>
+                ))}
+              </AlertDescription>
+            </Alert>
           )}
-
           <div className="overflow-x-auto">
-             <Table>
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nama Lengkap</TableHead>
@@ -261,7 +397,6 @@ export default function ManageUsersPage() {
                     </TableRow>
                   ))
                 )}
-
                 {!loading && !error && users.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
@@ -269,7 +404,6 @@ export default function ManageUsersPage() {
                     </TableCell>
                   </TableRow>
                 )}
-
                 {!loading && !error && users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.full_name}</TableCell>
@@ -282,13 +416,13 @@ export default function ManageUsersPage() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: id })}</TableCell>
                     <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled> {/* TODO: Implement Edit */}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
                         <Edit className="h-4 w-4" />
                         <span className="sr-only">Edit</span>
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" disabled={isPending}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" disabled={isTransitionPending}>
                             <Trash2 className="h-4 w-4" />
                             <span className="sr-only">Hapus</span>
                           </Button>
@@ -303,13 +437,13 @@ export default function ManageUsersPage() {
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel disabled={isPending}>Batal</AlertDialogCancel>
+                            <AlertDialogCancel disabled={isTransitionPending}>Batal</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => handleDeleteUser(user.id, user.full_name)}
-                              disabled={isPending}
+                              disabled={isTransitionPending}
                               className="bg-destructive hover:bg-destructive/90"
                             >
-                              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              {isTransitionPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                               Hapus
                             </AlertDialogAction>
                           </AlertDialogFooter>
@@ -320,36 +454,35 @@ export default function ManageUsersPage() {
                 ))}
               </TableBody>
             </Table>
-           </div>
-          {/* Pagination */}
-           {totalPages > 1 && (
+          </div>
+          {totalPages > 1 && !loading && !error && (
             <div className="flex justify-between items-center space-x-2 pt-4">
-               <span className="text-sm text-muted-foreground">
-                 Total {totalCount} pengguna
-               </span>
-                <div className="flex items-center space-x-2">
-                   <Button
-                       variant="outline"
-                       size="sm"
-                       onClick={() => handlePageChange(currentPage - 1)}
-                       disabled={currentPage === 1 || loading || isPending}
-                   >
-                       <ChevronLeft className="h-4 w-4" />
-                       <span className="hidden sm:inline ml-1">Sebelumnya</span>
-                   </Button>
-                   <span className="text-sm text-muted-foreground">
-                       Halaman {currentPage} dari {totalPages}
-                   </span>
-                   <Button
-                       variant="outline"
-                       size="sm"
-                       onClick={() => handlePageChange(currentPage + 1)}
-                       disabled={currentPage === totalPages || loading || isPending}
-                   >
-                       <span className="hidden sm:inline mr-1">Berikutnya</span>
-                       <ChevronRight className="h-4 w-4" />
-                   </Button>
-                </div>
+              <span className="text-sm text-muted-foreground">
+                Total {totalCount} pengguna
+              </span>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1 || loading || isTransitionPending}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline ml-1">Sebelumnya</span>
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Halaman {currentPage} dari {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages || loading || isTransitionPending}
+                >
+                  <span className="hidden sm:inline mr-1">Berikutnya</span>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -357,3 +490,5 @@ export default function ManageUsersPage() {
     </div>
   );
 }
+
+    

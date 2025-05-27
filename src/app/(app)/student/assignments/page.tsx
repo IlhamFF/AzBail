@@ -256,7 +256,6 @@ export default function StudentAssignmentsPage() {
   useEffect(() => {
     const handleAssignmentSubmitted = () => {
       if (!authLoading && user) {
-        fetchStudentAssignments();
       }
     };
     window.addEventListener('AssignmentSubmitted', handleAssignmentSubmitted);
