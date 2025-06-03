@@ -54,7 +54,6 @@ interface ManagedUser {
 }
 
 const ITEMS_PER_PAGE = 10;
-// ROLES is now imported from adminUserSchema
 
 export default function ManageUsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -71,7 +70,7 @@ export default function ManageUsersPage() {
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
 
   const createUserForm = useForm<CreateUserFormData>({
-    resolver: zodResolver(createUserSchema), // Use imported schema
+    resolver: zodResolver(createUserSchema),
     defaultValues: {
       fullName: '',
       email: '',
@@ -90,19 +89,19 @@ export default function ManageUsersPage() {
     try {
       let query = supabase
         .from('users')
-        .select(`
+        .select(\`
           id,
           email,
           role,
           is_verified,
           created_at,
           user_details ( full_name )
-        `, { count: 'exact' })
-        .order('created_at', { ascending: false }) // Corrected: created_at
+        \`, { count: 'exact' })
+        .order('created_at', { ascending: false })
         .range(from, to);
 
       if (searchTerm) {
-        query = query.or(`email.ilike.%${searchTerm}%,user_details.full_name.ilike.%${searchTerm}%`);
+        query = query.or(\`email.ilike.%\${searchTerm}%,user_details.full_name.ilike.%\${searchTerm}%\`);
       }
       if (filterRole !== 'all') {
         query = query.eq('role', filterRole);
@@ -116,18 +115,18 @@ export default function ManageUsersPage() {
       if (fetchError) {
         console.error('Supabase fetch users error:', fetchError);
         if (fetchError.message.includes("relationship between 'users' and 'user_details'")) {
-          const detailedErrorMessage = `Gagal memuat daftar pengguna: Supabase tidak dapat menemukan relasi antara 'users' dan 'user_details'.
+          const detailedErrorMessage = \`Gagal memuat daftar pengguna: Supabase tidak dapat menemukan relasi antara 'users' dan 'user_details'.
                           Pastikan foreign key dari 'user_details.user_id' ke 'auth.users.id' sudah benar di database Supabase Anda.
                           Cek Table Editor di Supabase, pilih tabel 'user_details', kolom 'user_id', dan pastikan Foreign Key merujuk ke 'auth.users' kolom 'id'.
-                          Setelah itu, coba refresh schema cache di Supabase (Settings -> API -> Reload schema).`;
+                          Setelah itu, coba refresh schema cache di Supabase (Settings -> API -> Reload schema).\`;
           setError(detailedErrorMessage);
           toast({
             variant: 'destructive',
             title: 'Konfigurasi Database Error',
             description: detailedErrorMessage,
-            duration: 10000, // Longer duration for important errors
+            duration: 15000, 
           });
-          return; // Stop further execution if there's a fundamental DB issue
+          return; 
         }
         throw fetchError;
       }
@@ -169,7 +168,7 @@ export default function ManageUsersPage() {
       if (result.success) {
         toast({
           title: 'Pengguna Dihapus',
-          description: `Pengguna ${userName || userId} berhasil dihapus.`,
+          description: \`Pengguna \${userName || userId} berhasil dihapus.\`,
         });
         if (users.length === 1 && currentPage > 1) {
           setCurrentPage(currentPage - 1);
@@ -192,7 +191,7 @@ export default function ManageUsersPage() {
       if (result.success) {
         toast({
           title: 'Pengguna Dibuat',
-          description: `Pengguna ${values.fullName} berhasil dibuat.`,
+          description: \`Pengguna \${values.fullName} berhasil dibuat.\`,
         });
         setIsCreateUserDialogOpen(false);
         createUserForm.reset();
@@ -361,7 +360,7 @@ export default function ManageUsersPage() {
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Error Memuat Data</AlertTitle>
               <AlertDescription>
-                {error.split('\n').map((line, index) => (
+                {error.split('\\n').map((line, index) => (
                   <React.Fragment key={index}>
                     {line}
                     <br />
@@ -491,5 +490,3 @@ export default function ManageUsersPage() {
     </div>
   );
 }
-
-    
