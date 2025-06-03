@@ -13,7 +13,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { id as LocaleID } from 'date-fns/locale';
-import { PlusCircle, FileText, Calendar as CalendarIcon, Edit, Trash2, AlertTriangle, Workflow } from 'lucide-react';
+import { PlusCircle, FileText, Calendar as CalendarIcon, Edit, Trash2, AlertTriangle, Workflow, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -28,6 +28,7 @@ interface Assignment {
   class_name: string;
   deadline: string;
   description?: string | null;
+  file_url?: string | null; // Added to potentially display if assignment has attachment
 }
 
 interface Subject {
@@ -73,6 +74,7 @@ export default function TeacherAssignmentsPage() {
           title,
           description,
           deadline,
+          file_url, 
           subjects (subject_name),
           classes (name)
         `)
@@ -81,7 +83,11 @@ export default function TeacherAssignmentsPage() {
 
       if (fetchError) {
         console.error("Error fetching assignments:", fetchError);
-        throw fetchError;
+        let errorMessage = fetchError.message || 'Gagal memuat daftar tugas.';
+        if (fetchError.details?.includes("could not find the relationship")) {
+            errorMessage = `Gagal memuat daftar tugas: Tidak dapat menemukan relasi tabel di database (kemungkinan antara assignments, subjects, atau classes). Harap periksa foreign key Anda di Supabase. Detail: ${fetchError.message}`;
+        }
+        throw new Error(errorMessage);
       }
       
       const formattedAssignments = data?.map(a => ({
@@ -89,14 +95,15 @@ export default function TeacherAssignmentsPage() {
         title: a.title,
         description: a.description,
         deadline: a.deadline,
+        file_url: a.file_url,
         subject_name: (a.subjects as { subject_name: string } | null)?.subject_name || 'Mapel Tidak Diketahui',
         class_name: (a.classes as { name: string } | null)?.name || 'Kelas Tidak Diketahui',
       })) || [];
       setAssignments(formattedAssignments);
     } catch (err: any) {
       console.error("Error in fetchAssignments processing:", err);
-      setError(err.message || 'Gagal memuat daftar tugas. Silakan coba lagi.');
-      toast({ variant: 'destructive', title: 'Error Memuat Tugas', description: err.message || 'Terjadi kesalahan.' });
+      setError(err.message);
+      toast({ variant: 'destructive', title: 'Error Memuat Tugas', description: err.message });
       setAssignments([]);
     } finally {
       setLoadingAssignments(false);
@@ -106,33 +113,31 @@ export default function TeacherAssignmentsPage() {
   const fetchFormData = async () => {
     if (!user?.id) return;
    setLoadingFormData(true);
-   setError(null); // Reset error state at the start of fetch
+   setError(null);
    try {
-     // Fetch all subjects
-     const { data: subjectsData, error: subjectsError } = await supabase
-       .from('subjects')
-       .select('id, subject_name')
-       .order('subject_name', { ascending: true });
- 
-     if (subjectsError) {
-         console.error("Supabase fetch subjects error:", subjectsError); // Log detailed error
-         throw subjectsError;
-     }
- 
- 
-     // Fetch all classes
-     const { data: classesData, error: classesError } = await supabase
-       .from('classes')
-       .select('id, name')
-       .order('name', { ascending: true });
- 
-     if (classesError) {
-         console.error("Supabase fetch classes error:", classesError); // Log detailed error
-         throw classesError;
-     }
- 
-     setTeacherSubjects(subjectsData || []);
-     setTeacherClasses(classesData || []);
+     const { data: scheduleData, error: scheduleError } = await supabase
+        .from('class_schedules')
+        .select('classes!inner(id, name), subjects!inner(id, subject_name)')
+        .eq('teacher_id', user.id);
+
+    if (scheduleError) {
+        console.error("Supabase fetch scheduleData error:", scheduleError);
+        throw scheduleError;
+    }
+
+    const uniqueClasses = new Map<string, Class>();
+    const uniqueSubjects = new Map<string, Subject>();
+
+    scheduleData?.forEach(item => {
+        // Since we use !inner, classes and subjects should exist.
+        const classItem = item.classes as Class;
+        const subjectItem = item.subjects as Subject;
+        if (classItem && !uniqueClasses.has(classItem.id)) uniqueClasses.set(classItem.id, classItem);
+        if (subjectItem && !uniqueSubjects.has(subjectItem.id)) uniqueSubjects.set(subjectItem.id, subjectItem);
+    });
+    
+    setTeacherSubjects(Array.from(uniqueSubjects.values()).sort((a,b) => a.subject_name.localeCompare(b.subject_name)));
+    setTeacherClasses(Array.from(uniqueClasses.values()).sort((a,b) => a.name.localeCompare(b.name)));
  
    } catch (err: any) {
      console.error("Error fetching form data:", err);
@@ -168,10 +173,9 @@ export default function TeacherAssignmentsPage() {
     try {
       let assignmentFileUrl: string | null = null;
       if (file) {
-        // Upload file to Supabase Storage
         const filePath = `assignments/${user.id}/${subjectId}/${Date.now()}_${file.name}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('school-assignments') // **Pastikan bucket ini ada**
+          .from('school-assignments')
           .upload(filePath, file);
         if (uploadError) throw uploadError;
         if (!uploadData) throw new Error('Gagal upload file tugas.');
@@ -192,32 +196,27 @@ export default function TeacherAssignmentsPage() {
           class_id: classId,
           teacher_id: user.id,
           deadline: deadline.toISOString(),
-          file_url: assignmentFileUrl, // Kolom untuk menyimpan URL file tugas
+          file_url: assignmentFileUrl,
         });
       
       if (insertError) throw insertError;
 
       toast({ title: 'Tugas Dibuat', description: 'Tugas berhasil dibuat dan ditugaskan.' });
-      // Reset form
       setTitle(''); setSubjectId(''); setClassId(''); setDeadline(undefined); setInstructions(''); setFile(null);
-      fetchAssignments(); // Refresh list
+      fetchAssignments(); 
     } catch (err: any) {
-      console.error("Error creating assignment:", err); // Tetap log objek error lengkap
+      console.error("Error creating assignment:", err); 
       let errorMessage = 'Gagal membuat tugas.';
-      if (err && err.message) { // Coba akses properti .message
+      if (err && err.message) { 
           errorMessage = `Gagal membuat tugas: ${err.message}`;
-      } else if (typeof err === 'string') { // Jika error adalah string
+      } else if (typeof err === 'string') { 
           errorMessage = `Gagal membuat tugas: ${err}`;
-      } else {
-          errorMessage = 'Gagal membuat tugas: Terjadi kesalahan yang tidak diketahui.';
       }
 
       toast({ variant: 'destructive', title: 'Gagal Membuat Tugas', description: errorMessage });
-      // Optional: setError(errorMessage); // Set error state jika ingin ditampilkan di UI
     } finally {
       setIsCreating(false);
     }
-
   };
 
   return (
@@ -226,7 +225,7 @@ export default function TeacherAssignmentsPage() {
         <h1 className="text-2xl font-semibold">Kelola Tugas</h1>
       </div>
       
-       {error && (
+       {error && !loadingAssignments && !loadingFormData && ( // Show general error only if not specific loading
          <Alert variant="destructive" className="mb-4">
            <AlertTriangle className="h-4 w-4" />
            <AlertTitle>Error</AlertTitle>
@@ -282,7 +281,6 @@ export default function TeacherAssignmentsPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
                       <Calendar mode="single" selected={deadline} onSelect={setDeadline} initialFocus />
-                       {/* Time input could be added here if needed, or use a DateTimePicker component */}
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -298,7 +296,7 @@ export default function TeacherAssignmentsPage() {
               </div>
               <div className="flex justify-end">
                 <Button type="submit" disabled={isCreating || loadingFormData}>
-                  {isCreating && <PlusCircle className="mr-2 h-4 w-4 animate-spin" />}
+                  {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {isCreating ? 'Menyimpan...' : <><PlusCircle className="mr-2 h-4 w-4" /> Simpan Tugas</>}
                 </Button>
               </div>
@@ -331,6 +329,11 @@ export default function TeacherAssignmentsPage() {
                   <CardContent>
                     <p className="text-sm text-muted-foreground">Batas Waktu: {format(new Date(assignment.deadline), "dd MMM yyyy, HH:mm", { locale: LocaleID })}</p>
                     {assignment.description && <p className="text-sm mt-1 line-clamp-2">Deskripsi: {assignment.description}</p>}
+                    {assignment.file_url && (
+                        <a href={assignment.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline mt-1 block">
+                            Lihat Lampiran
+                        </a>
+                    )}
                   </CardContent>
                   <CardFooter className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" disabled>Lihat Pengumpulan</Button>
@@ -346,5 +349,4 @@ export default function TeacherAssignmentsPage() {
     </div>
   );
 }
-
     
