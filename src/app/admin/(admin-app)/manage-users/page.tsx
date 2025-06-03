@@ -37,10 +37,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { deleteUser } from '@/actions/admin/deleteUser';
-import { createUserByAdmin, type CreateUserFormData, type CreateUserResult } from '@/actions/admin/createUserByAdmin';
+import { createUserByAdmin } from '@/actions/admin/createUser'; // Corrected import path
+import type { CreateUserFormData, CreateUserResult } from '@/lib/schemas/adminUserSchema'; // Corrected import path for types
+import { createUserSchema, ROLES } from '@/lib/schemas/adminUserSchema'; // Corrected import path for schema and ROLES
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface ManagedUser {
@@ -53,16 +54,7 @@ interface ManagedUser {
 }
 
 const ITEMS_PER_PAGE = 10;
-const ROLES = ['Admin', 'Guru', 'Siswa', 'Tata Usaha', 'Kepala Sekolah'];
-
-const createUserFormSchema = z.object({
-  fullName: z.string().min(3, { message: 'Nama lengkap minimal 3 karakter.' }),
-  email: z.string().email({ message: 'Format email tidak valid.' }),
-  password: z.string().min(6, { message: 'Password minimal 6 karakter.' }),
-  role: z.enum(ROLES as [string, ...string[]], { // Ensure zod enum gets a non-empty array
-    required_error: 'Peran harus dipilih.',
-  }),
-});
+// ROLES is now imported from adminUserSchema
 
 export default function ManageUsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -79,7 +71,7 @@ export default function ManageUsersPage() {
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
 
   const createUserForm = useForm<CreateUserFormData>({
-    resolver: zodResolver(createUserFormSchema),
+    resolver: zodResolver(createUserSchema), // Use imported schema
     defaultValues: {
       fullName: '',
       email: '',
@@ -106,7 +98,7 @@ export default function ManageUsersPage() {
           created_at,
           user_details ( full_name )
         `, { count: 'exact' })
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }) // Corrected: created_at
         .range(from, to);
 
       if (searchTerm) {
@@ -124,10 +116,18 @@ export default function ManageUsersPage() {
       if (fetchError) {
         console.error('Supabase fetch users error:', fetchError);
         if (fetchError.message.includes("relationship between 'users' and 'user_details'")) {
-          throw new Error(`Gagal memuat daftar pengguna: Supabase tidak dapat menemukan relasi antara 'users' dan 'user_details'. 
-                          Pastikan foreign key dari 'user_details.user_id' ke 'auth.users.id' sudah benar di database Supabase Anda. 
-                          Cek Table Editor di Supabase, pilih tabel 'user_details', kolom 'user_id', dan pastikan Foreign Key merujuk ke 'auth.users' kolom 'id'. 
-                          Setelah itu, coba refresh schema cache di Supabase (Settings -> API).`);
+          const detailedErrorMessage = `Gagal memuat daftar pengguna: Supabase tidak dapat menemukan relasi antara 'users' dan 'user_details'.
+                          Pastikan foreign key dari 'user_details.user_id' ke 'auth.users.id' sudah benar di database Supabase Anda.
+                          Cek Table Editor di Supabase, pilih tabel 'user_details', kolom 'user_id', dan pastikan Foreign Key merujuk ke 'auth.users' kolom 'id'.
+                          Setelah itu, coba refresh schema cache di Supabase (Settings -> API -> Reload schema).`;
+          setError(detailedErrorMessage);
+          toast({
+            variant: 'destructive',
+            title: 'Konfigurasi Database Error',
+            description: detailedErrorMessage,
+            duration: 10000, // Longer duration for important errors
+          });
+          return; // Stop further execution if there's a fundamental DB issue
         }
         throw fetchError;
       }
@@ -145,12 +145,13 @@ export default function ManageUsersPage() {
       setTotalCount(count || 0);
 
     } catch (err: any) {
-      console.error('Error fetching users:', err);
-      setError(err.message || 'Terjadi kesalahan server.');
+      const errorMessage = err.message || 'Terjadi kesalahan server saat mengambil data pengguna.';
+      console.error('Error fetching users:', errorMessage);
+      setError(errorMessage);
       toast({
         variant: 'destructive',
         title: 'Gagal Memuat Data Pengguna',
-        description: err.message,
+        description: errorMessage,
       });
     } finally {
       setLoading(false);
