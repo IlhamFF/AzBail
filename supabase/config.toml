@@ -690,3 +690,14 @@ project_id = "eduportal-e51458"
 # Format: integer (optional)
 # Default: 54326
 # web_ui_port = 54327
+
+[functions.halo-dunia]
+enabled = true
+verify_jwt = true
+import_map = "./functions/halo-dunia/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/halo-dunia/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/halo-dunia/*.html" ]

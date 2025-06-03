@@ -64,6 +64,7 @@ export default function TeacherAssignmentsPage() {
   const fetchAssignments = async () => {
     if (!user?.id) return;
     setLoadingAssignments(true);
+    setError(null);
     try {
       const { data, error: fetchError } = await supabase
         .from('assignments')
@@ -78,20 +79,25 @@ export default function TeacherAssignmentsPage() {
         .eq('teacher_id', user.id)
         .order('deadline', { ascending: false });
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        console.error("Error fetching assignments:", fetchError);
+        throw fetchError;
+      }
       
       const formattedAssignments = data?.map(a => ({
         id: a.id,
         title: a.title,
         description: a.description,
         deadline: a.deadline,
-        subject_name: (a.subjects as any)?.subject_name || 'N/A',
-        class_name: (a.classes as any)?.name || 'N/A',
+        subject_name: (a.subjects as { subject_name: string } | null)?.subject_name || 'Mapel Tidak Diketahui',
+        class_name: (a.classes as { name: string } | null)?.name || 'Kelas Tidak Diketahui',
       })) || [];
       setAssignments(formattedAssignments);
     } catch (err: any) {
-      setError(err.message || 'Gagal memuat daftar tugas.');
-      toast({ variant: 'destructive', title: 'Error Tugas', description: err.message });
+      console.error("Error in fetchAssignments processing:", err);
+      setError(err.message || 'Gagal memuat daftar tugas. Silakan coba lagi.');
+      toast({ variant: 'destructive', title: 'Error Memuat Tugas', description: err.message || 'Terjadi kesalahan.' });
+      setAssignments([]);
     } finally {
       setLoadingAssignments(false);
     }
